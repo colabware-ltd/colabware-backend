@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"log"
+	"math/big"
 	"strings"
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
@@ -27,14 +29,26 @@ func main() {
 		log.Fatalf("Failed to create authorized transactor: %v", err)
 	}
 
+	gasPrice, err := blockchain.SuggestGasPrice(context.Background())
+
+	// auth.Signer = types.LatestSignerForChainID(big.NewInt(int64(1)))
+
 	contract, err := contracts.NewInbox(common.HexToAddress("0x907c3136f9689923710d2ee1983033136af390e4"), blockchain)
 	if err != nil {
 		log.Fatalf("Unable to bind to deployed instance of contract:%v\n")
 	}
 
-	contract.SetMessage(&bind.TransactOpts{
-		From:   auth.From,
-		Signer: auth.Signer,
-		Value:  nil,
-	}, "Hello From Mars")
+	_, err = contract.SetMessage(&bind.TransactOpts{
+		From:      auth.From,
+		Signer:    auth.Signer,
+		Value:     nil,
+		Nonce:     big.NewInt(int64(2)),
+		GasFeeCap: nil,
+		GasPrice:  gasPrice,
+	}, "Hello From Earth")
+
+	if err != nil {
+		log.Fatalf("Failed to run transaction: %v", err)
+	}
+
 }
