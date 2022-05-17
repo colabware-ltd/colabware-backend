@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"math/big"
 	"strings"
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
@@ -42,13 +41,11 @@ func main() {
 		From:      auth.From,
 		Signer:    auth.Signer,
 		Value:     nil,
-		Nonce:     big.NewInt(int64(2)),
 		GasFeeCap: nil,
 		GasPrice:  gasPrice,
-	}, "Hello From Earth")
+	}, "Hello Nathan")
 
 	if err != nil {
 		log.Fatalf("Failed to run transaction: %v", err)
 	}
-
 }

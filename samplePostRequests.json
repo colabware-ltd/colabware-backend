@@ -1,0 +1,19 @@
+{
+    "requests":
+    [
+        {
+            "create project":
+            {
+                "name": "nathan",
+                "repository": "https://github.com/nathan",
+                "description": "my first project",
+                "categories": ["X","Y"],
+                "maintainers": ["nathan","declan"],
+                "requestConfig": {
+                    "minTokens": 123,
+                    "maintanerApproval": true
+                }
+            }
+        }
+    ]
+}
