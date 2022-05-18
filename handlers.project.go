@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -20,10 +22,15 @@ type RequestConfig struct {
 	MaintainerApproval bool `json:"maintainerApproval"`
 }
 
-func postProject(c *gin.Context) {
+func (con Connection) postProject(c *gin.Context) {
 	var p Project
 	if err := c.BindJSON(&p); err != nil {
 		return
+	}
+
+	_, err := con.Projects.InsertOne(context.Background(), p)
+	if err != nil {
+		log.Fatal("can't create db stuff")
 	}
 
 	c.IndentedJSON(http.StatusCreated, p)

@@ -2,29 +2,21 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var router *gin.Engine
-var client *mongo.Client
 
-func main() {
-	// Set Gin to production mode
-	gin.SetMode(gin.ReleaseMode)
+type Connection struct {
+	Projects *mongo.Collection
+}
 
-	// Set the router as the default one provided by Gin
-	router = gin.Default()
-
-	// Initialize the routes
-	initializeRoutes()
-
+func initDB() *mongo.Client {
 	// Connect to the database
 	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://172.18.0.2:27017"))
 	if err != nil {
@@ -36,12 +28,24 @@ func main() {
 		log.Fatal(err)
 	}
 	defer client.Disconnect(ctx)
+	return client
+}
 
-	databases, err := client.ListDatabaseNames(ctx, bson.M{})
-	if err != nil {
-		log.Fatal(err)
+func main() {
+	// Set Gin to production mode
+	gin.SetMode(gin.ReleaseMode)
+
+	// Set the router as the default one provided by Gin
+	router = gin.Default()
+
+	client := initDB()
+	defer client.Disconnect(context.Background())
+	conn := Connection{
+		client.Database("colabware").Collection("Projects"),
 	}
-	fmt.Println(databases)
+
+	// Initialize the routes
+	initializeRoutes(conn)
 
 	// Start serving the application
 	router.Run(":9999")

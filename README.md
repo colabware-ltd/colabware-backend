@@ -18,7 +18,7 @@ https://faucets.chain.link/rinkeby
 # Install solc
 https://pentestwiki.org/blockchain/how-to-install-solc-in-linux/
 
-# Compile sol files
+# Compile sol filesefekjl; 
 abigen -sol inbox.sol -pkg contracts -out inbox.go
 
 # How to run
