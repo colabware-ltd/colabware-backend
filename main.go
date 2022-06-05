@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 var router *gin.Engine
@@ -27,7 +28,10 @@ func initDB() *mongo.Client {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer client.Disconnect(ctx)
+	if err := client.Ping(context.TODO(), readpref.Primary()); err != nil {
+		// Can't connect to Mongo server
+		log.Fatal(err)
+	}
 	return client
 }
 
@@ -41,7 +45,7 @@ func main() {
 	client := initDB()
 	defer client.Disconnect(context.Background())
 	conn := Connection{
-		client.Database("colabware").Collection("Projects"),
+		Projects: client.Database("colabware").Collection("projects"),
 	}
 
 	// Initialize the routes

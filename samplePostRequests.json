@@ -4,14 +4,16 @@
         {
             "create project":
             {
-                "name": "nathan",
+                "name": "nathan1",
                 "repository": "https://github.com/nathan",
                 "description": "my first project",
                 "categories": ["X","Y"],
                 "maintainers": ["nathan","declan"],
-                "requestConfig": {
-                    "minTokens": 123,
-                    "maintanerApproval": true
+                "tokenConfig": {
+                    "name": "Nathan Coin",
+                    "symbol": "NTH",
+                    "price": 12,
+                    "maintainerAllocation": 15.5
                 }
             }
         }

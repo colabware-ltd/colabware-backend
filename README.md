@@ -18,11 +18,11 @@ https://faucets.chain.link/rinkeby
 # Install solc
 https://pentestwiki.org/blockchain/how-to-install-solc-in-linux/
 
-# Compile sol filesefekjl; 
+# Compile sol file; 
 abigen -sol inbox.sol -pkg contracts -out inbox.go
 
 # How to run
-go build; ./colabware-backend
+pkill -f colabware-backend; go build; ./colabware-backend >> log 2>&1 &
 
 # Etherscan link
 https://rinkeby.etherscan.io/address/0x907c3136f9689923710d2ee1983033136af390e4
