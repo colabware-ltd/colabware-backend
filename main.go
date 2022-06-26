@@ -17,6 +17,7 @@ var store = cookie.NewStore([]byte("secret"))
 
 type Connection struct {
 	Projects *mongo.Collection
+	Users *mongo.Collection
 }
 
 func initDB() *mongo.Client {
@@ -50,6 +51,7 @@ func main() {
 	defer client.Disconnect(context.Background())
 	conn := Connection{
 		Projects: client.Database("colabware").Collection("projects"),
+		Users: client.Database("colabware").Collection("users"),
 	}
 
 	// Initialize Google auth
