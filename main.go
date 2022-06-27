@@ -22,8 +22,8 @@ type Connection struct {
 
 func initDB() *mongo.Client {
 	// Connect to the database
-	// client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://172.18.0.2:27017"))
-	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://127.0.0.1:27017"))
+	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://172.18.0.2:27017"))
+// 	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://127.0.0.1:27017"))
 	if err != nil {
 		log.Fatal(err)
 	}
