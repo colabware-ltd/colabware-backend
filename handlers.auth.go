@@ -22,7 +22,7 @@ type User struct {
 	Picture       string `json:"picture"`
 	Email         string `json:"email"`
 	EmailVerified bool   `json:"email_verified"`
-	Gender        string `json:"gender"`
+	WalletAddress string `json:"wallet_address"`
 }
 
 func loginHandler(c *gin.Context) {

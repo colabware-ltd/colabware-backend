@@ -28,7 +28,6 @@ func initializeRoutes(c Connection) {
 	}
 	router.GET("/", hello)
 	router.GET("/api/project/:name", c.getProject)
-	// router.POST("/api/project/", c.postProject)
 	router.GET("/login", loginHandler)
 	router.GET("/auth", c.authHandler)
 }
