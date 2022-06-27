@@ -4,34 +4,41 @@ import (
 	"context"
 	"log"
 	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
+	"github.com/gin-contrib/sessions"
 )
 
 type Project struct {
-	Name        string      `json:"name"`
-	Repository  string      `json:"repository"`
-	Description string      `json:"description"`
-	Categories  []string    `json:"categories"`
-	Maintainers []string    `json:"maintainers"`
-	TokeConfig  TokenConfig `json:"tokenConfig"`
+	Name        string   `json:"name"`
+	Repository  string   `json:"repository"`
+	Description string   `json:"description"`
+	Categories  []string `json:"categories"`
+	Maintainers []string `json:"maintainers"`
+	Token       Token    `json:"token"`
 }
 
-type TokenConfig struct {
+type Token struct {
 	Name                 string  `json:"name"`
 	Symbol               string  `json:"symbol"`
 	Price                float32 `json:"price"`
+	Supply               int     `json:"supply"`
 	MaintainerAllocation float32 `json:"maintainerAllocation"`
 }
 
 func (con Connection) postProject(c *gin.Context) {
 	var p Project
+	session := sessions.Default(c)
+	id := session.Get("user-id")
+	if str, ok := id.(string); ok {
+		p.Maintainers = append(p.Maintainers, str)
+	}
 	if err := c.BindJSON(&p); err != nil {
 		log.Printf("%v", err)
 		return
 	}
 	_, err := con.Projects.InsertOne(context.TODO(), p)
+	// TODO: Update user object with created project
 	if err != nil {
 		log.Printf("%v", err)
 		return
