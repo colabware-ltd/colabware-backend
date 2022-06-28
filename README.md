@@ -26,3 +26,23 @@ pkill -f colabware-backend; go build; ./colabware-backend >> log 2>&1 &
 
 # Etherscan link
 https://rinkeby.etherscan.io/address/0x907c3136f9689923710d2ee1983033136af390e4
+
+# How to run MongoDB
+In the root folder of the repo (e.g. colabware-backend), do: `mkdir -p mongodb/database`
+Create a file called `colabware-backend/mongodb/database/docker-compose.yml` with the following content:
+```
+version: "3.8"
+services:
+  mongodb:
+    image : mongo
+    container_name: mongodb
+    environment:
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - /$YOUR_LOCAL_REPO_PATH/colabware-backend/mongodb/database:/data/db
+    ports:
+      - 27017:27017
+    restart: unless-stopped
+```
+Run `docker-compose up -d`

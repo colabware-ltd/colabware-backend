@@ -7,7 +7,7 @@ services:
       - PUID=1000
       - PGID=1000
     volumes:
-      - /Users/declanhealey/repository/colabware-backend/mongodb/database:/data/db
+      - /home/treenhan/repos/colabware-backend/mongodb/database:/data/db
     ports:
       - 27017:27017
     restart: unless-stopped
