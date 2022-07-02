@@ -33,7 +33,7 @@ func initAuth() {
         ClientID:     cred.Cid,
         ClientSecret: cred.Csecret,
         // Update RedirectURL
-        RedirectURL:  "http://127.0.0.1:9999/auth",
+        RedirectURL:  "http://127.0.0.1/auth",
         Scopes: []string{
             "https://www.googleapis.com/auth/userinfo.email",
         },
