@@ -57,7 +57,8 @@ func (con Connection) getUser(c *gin.Context) {
 		return
 	}
 	log.Printf("%v", usersFiltered[0])
-	c.IndentedJSON(http.StatusFound, usersFiltered[0])
+	c.JSON(http.StatusFound, usersFiltered[0])
+	// c.IndentedJSON(http.StatusFound, usersFiltered[0])
 }
 
 func (con Connection) authHandler(c *gin.Context) {
@@ -129,4 +130,14 @@ func (con Connection) authHandler(c *gin.Context) {
 	}
     c.Redirect(http.StatusFound, "/")
 	
+}
+
+func (con Connection) logout(c *gin.Context) {
+	session := sessions.Default(c)
+	session.Delete("user-id")
+	err := session.Save()
+	if err != nil {
+		log.Println(err)
+		return
+	}
 }
