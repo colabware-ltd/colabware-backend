@@ -31,6 +31,7 @@ func initializeRoutes(c Connection) {
 	}
 	router.GET("/api", hello)
 	router.GET("/api/project/:name", c.getProject)
+	router.GET("/api/project/list", c.listProjects)
 	router.GET("/login", loginHandler)
 	router.GET("/auth", c.authHandler)
 }

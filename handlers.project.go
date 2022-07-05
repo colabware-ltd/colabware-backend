@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"log"
+	"strconv"
 	"net/http"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"github.com/gin-contrib/sessions"
 )
 
@@ -69,4 +71,44 @@ func (con Connection) getProject(c *gin.Context) {
 
 	log.Printf("%v", projectsFiltered[0])
 	c.IndentedJSON(http.StatusFound, projectsFiltered[0])
+}
+
+func (con Connection) listProjects(c *gin.Context) {
+	page := c.DefaultQuery("page", "1")
+	limit := c.DefaultQuery("limit", "10")
+
+	limitInt, err := strconv.ParseInt(limit, 10, 64)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	pageInt, err := strconv.ParseInt(page, 10, 64)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	options := options.Find()
+	options.SetProjection(bson.M{"name": 1, "categories": 1, "_id": 0})
+	options.SetLimit(limitInt)
+	options.SetSkip(limitInt * (pageInt - 1))
+
+	// TODO: Add select to retrieve only _id and name
+	filterCursor, err := con.Projects.Find(context.TODO(), bson.M{}, options)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	var projectsFiltered []bson.M
+	err = filterCursor.All(context.TODO(), &projectsFiltered)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	log.Printf("%v", projectsFiltered)
+	c.IndentedJSON(http.StatusFound, projectsFiltered)
 }
