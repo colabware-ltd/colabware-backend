@@ -28,6 +28,7 @@ type Token struct {
 	MaintainerAllocation float32 `json:"maintainerAllocation"`
 }
 
+
 func (con Connection) postProject(c *gin.Context) {
 	var p Project
 	session := sessions.Default(c)
@@ -91,11 +92,11 @@ func (con Connection) listProjects(c *gin.Context) {
 	}
 
 	options := options.Find()
-	options.SetProjection(bson.M{"name": 1, "categories": 1, "_id": 0})
+	options.SetProjection(bson.M{"name": 1, "categories": 1, "description": 1, "_id": 0})
 	options.SetLimit(limitInt)
 	options.SetSkip(limitInt * (pageInt - 1))
 
-	// TODO: Add select to retrieve only _id and name
+	total, err := con.Projects.CountDocuments(context.TODO(), bson.M{})
 	filterCursor, err := con.Projects.Find(context.TODO(), bson.M{}, options)
 	if err != nil {
 		log.Printf("%v", err)
@@ -110,5 +111,5 @@ func (con Connection) listProjects(c *gin.Context) {
 		return
 	}
 	log.Printf("%v", projectsFiltered)
-	c.IndentedJSON(http.StatusFound, projectsFiltered)
+	c.IndentedJSON(http.StatusFound, gin.H{"total": total, "results": projectsFiltered} )
 }
