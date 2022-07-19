@@ -17,12 +17,13 @@ func main() {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 	}
 
-	// Create a new instance of the Inbox contract bound to a specific deployed contract
-	contract, err := contracts.NewInbox(common.HexToAddress("0x907c3136f9689923710d2ee1983033136af390e4"), blockchain)
+	// Create a new instance of the Project contract bound to a specific deployed contract
+	contract, err := contracts.NewProject(common.HexToAddress("0xa6ddad0fdcb3b50357352bb1dceeea5033c9d24f"), blockchain)
 	if err != nil {
 		log.Fatalf("Unable to bind to deployed instance of contract:%v\n")
 	}
 
-	fmt.Println(contract.Message(nil))
+	fmt.Println(contract)
+	fmt.Println("Hello!")
 
 }

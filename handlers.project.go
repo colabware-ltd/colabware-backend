@@ -37,33 +37,22 @@ func (con Connection) postProject(c *gin.Context) {
 	session := sessions.Default(c)
 	userId := session.Get("user-id")
 
+	// Find ID of current user
 	var user struct {
 		ID primitive.ObjectID `bson:"_id, omitempty"`
 	}
-
-	// Get user
 	e := con.Users.FindOne(context.TODO(), bson.M{"email": userId}).Decode(&user)
 	if e != nil { 
 		log.Printf("%v", e)
 		return
 	}
-	fmt.Println(user.ID)
 
+	// Add current user to project maintainers
 	p.Maintainers = append(p.Maintainers, user.ID)
-
-
-	// TODO: Add user id instead of email identifier
-
-	// email := ""
-	// if str, ok := userId.(string); ok {
-	// 	email = str
-	// 	p.Maintainers = append(p.Maintainers, str)
-	// }
 	if err := c.BindJSON(&p); err != nil {
 		log.Printf("%v", err)
 		return
 	}
-
 	result, err := con.Projects.InsertOne(context.TODO(), p)
 
 	selector := bson.M{"_id": user.ID}

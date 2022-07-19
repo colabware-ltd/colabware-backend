@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
-
+	"math/big"
 	"github.com/colabware-ltd/colabware-backend/contracts"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -31,10 +31,12 @@ func main() {
 		log.Fatalf("Failed to create authorized transactor: %v", err)
 	}
 
-	address, _, _, err := contracts.DeployInbox(
+	address, _, _, err := contracts.DeployProject(
 		auth,
 		blockchain,
-		"Hello World",
+		"My New Token",
+		"MNT",
+		big.NewInt(1000),
 	)
 
 	if err != nil {
