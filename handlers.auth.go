@@ -11,6 +11,8 @@ import (
 	"github.com/gin-contrib/sessions"
 	"golang.org/x/oauth2"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+
 )
 
 type User struct {
@@ -23,6 +25,7 @@ type User struct {
 	Email         string `json:"email"`
 	EmailVerified bool   `json:"email_verified"`
 	WalletAddress string `json:"wallet_address"`
+	ProjectsMaintained []primitive.ObjectID `json:"projects_maintained"`
 }
 
 func loginHandler(c *gin.Context) {

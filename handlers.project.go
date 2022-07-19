@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strconv"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"github.com/gin-contrib/sessions"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+
 )
 
 type Project struct {
@@ -16,7 +19,7 @@ type Project struct {
 	Repository  string   `json:"repository"`
 	Description string   `json:"description"`
 	Categories  []string `json:"categories"`
-	Maintainers []string `json:"maintainers"`
+	Maintainers []primitive.ObjectID `json:"maintainers"`
 	Token       Token    `json:"token"`
 }
 
@@ -32,16 +35,43 @@ type Token struct {
 func (con Connection) postProject(c *gin.Context) {
 	var p Project
 	session := sessions.Default(c)
-	id := session.Get("user-id")
-	if str, ok := id.(string); ok {
-		p.Maintainers = append(p.Maintainers, str)
+	userId := session.Get("user-id")
+
+	var user struct {
+		ID primitive.ObjectID `bson:"_id, omitempty"`
 	}
+
+	// Get user
+	e := con.Users.FindOne(context.TODO(), bson.M{"email": userId}).Decode(&user)
+	if e != nil { 
+		log.Printf("%v", e)
+		return
+	}
+	fmt.Println(user.ID)
+
+	p.Maintainers = append(p.Maintainers, user.ID)
+
+
+	// TODO: Add user id instead of email identifier
+
+	// email := ""
+	// if str, ok := userId.(string); ok {
+	// 	email = str
+	// 	p.Maintainers = append(p.Maintainers, str)
+	// }
 	if err := c.BindJSON(&p); err != nil {
 		log.Printf("%v", err)
 		return
 	}
-	_, err := con.Projects.InsertOne(context.TODO(), p)
-	// TODO: Update user object with created project
+
+	result, err := con.Projects.InsertOne(context.TODO(), p)
+
+	selector := bson.M{"_id": user.ID}
+	update := bson.M{
+		"$push": bson.M{"projects_maintained": result.InsertedID},
+	}
+	_, err = con.Users.UpdateOne(context.TODO(), selector, update)
+
 	if err != nil {
 		log.Printf("%v", err)
 		return
