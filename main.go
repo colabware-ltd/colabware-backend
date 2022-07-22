@@ -22,9 +22,8 @@ type Connection struct {
 	Wallets  *mongo.Collection
 }
 
-func initDB() *mongo.Client {
+func initDB(dbUser, dbPass, dbAddr string) *mongo.Client {
 	// Connect to the database
-	//client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://172.18.0.2:27017"))
 	credential := options.Credential{
 		Username: "colabware",
 		Password: "zfbj3c7oEFgsuSrTx6",
@@ -47,6 +46,10 @@ func initDB() *mongo.Client {
 }
 
 func main() {
+	config, err := LoadConfig(".")
+	if err != nil {
+		log.Fatal("cannot load config:", err)
+	}
 	// Set Gin to production mode
 	gin.SetMode(gin.ReleaseMode)
 
@@ -54,7 +57,7 @@ func main() {
 	router = gin.Default()
 	router.Use(sessions.Sessions("colabware-auth", store))
 
-	client := initDB()
+	client := initDB(config.DBUser, config.DBPass, config.DBAddr)
 	defer client.Disconnect(context.Background())
 	conn := Connection{
 		Projects: client.Database("colabware").Collection("projects"),
@@ -69,7 +72,7 @@ func main() {
 	initializeRoutes(conn)
 
 	// Start serving the application
-	err := router.Run(":9999")
+	err = router.Run(":9999")
 	if err != nil {
 		log.Fatal(err)
 	}
