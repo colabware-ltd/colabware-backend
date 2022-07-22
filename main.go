@@ -4,9 +4,10 @@ import (
 	"context"
 	"log"
 	"time"
-	"github.com/gin-gonic/gin"
+
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
+	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -17,17 +18,22 @@ var store = cookie.NewStore([]byte("secret"))
 
 type Connection struct {
 	Projects *mongo.Collection
-	Users *mongo.Collection
+	Users    *mongo.Collection
+	Wallets  *mongo.Collection
 }
 
 func initDB() *mongo.Client {
 	// Connect to the database
-	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://172.18.0.2:27017"))
-// 	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://127.0.0.1:27017"))
+	//client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://172.18.0.2:27017"))
+	credential := options.Credential{
+		Username: "colabware",
+		Password: "zfbj3c7oEFgsuSrTx6",
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017").SetAuth(credential))
 	if err != nil {
 		log.Fatal(err)
 	}
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
 	err = client.Connect(ctx)
 	if err != nil {
 		log.Fatal(err)
@@ -37,6 +43,7 @@ func initDB() *mongo.Client {
 		log.Fatal(err)
 	}
 	return client
+
 }
 
 func main() {
@@ -51,7 +58,8 @@ func main() {
 	defer client.Disconnect(context.Background())
 	conn := Connection{
 		Projects: client.Database("colabware").Collection("projects"),
-		Users: client.Database("colabware").Collection("users"),
+		Users:    client.Database("colabware").Collection("users"),
+		Wallets:  client.Database("colabware").Collection("wallets"),
 	}
 
 	// Initialize Google auth
@@ -61,5 +69,8 @@ func main() {
 	initializeRoutes(conn)
 
 	// Start serving the application
-	router.Run(":9999")
+	err := router.Run(":9999")
+	if err != nil {
+		log.Fatal(err)
+	}
 }
