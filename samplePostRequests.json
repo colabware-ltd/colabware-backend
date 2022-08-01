@@ -16,6 +16,14 @@
                     "maintainerAllocation": 15.5
                 }
             }
+        },
+        {
+            "transfer funds":
+            {
+                "WalletName": "nathan1",
+                "Amount": 0.01,
+                "To": "0x5aBAD6EcEA46d9F89C57a53bE86b1223598900a6"
+            }
         }
     ]
 }

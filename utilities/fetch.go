@@ -9,8 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-func Fetch() {
-	// connect to an ethereum node  hosted by infura
+func main() {
+	// connect to an ethereum node hosted by infura
 	blockchain, err := ethclient.Dial("https://rinkeby.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
 
 	if err != nil {
