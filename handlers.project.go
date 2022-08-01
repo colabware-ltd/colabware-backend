@@ -2,18 +2,21 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"strconv"
 	"net/http"
+	"strconv"
+
+	"github.com/colabware-ltd/colabware-backend/utilities"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"github.com/gin-contrib/sessions"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// TODO: Create wallet for project upon creation. Maintainers should then
+// be able to access this wallet. Wallet should hold maintainer tokens.
 type Project struct {
 	Name        string   `json:"name"`
 	Repository  string   `json:"repository"`
@@ -24,11 +27,12 @@ type Project struct {
 }
 
 type Token struct {
-	Name                 string  `json:"name"`
-	Symbol               string  `json:"symbol"`
-	Price                float32 `json:"price"`
-	Supply               int     `json:"supply"`
-	MaintainerAllocation float32 `json:"maintainerAllocation"`
+	Name                 string         `json:"name"`
+	Symbol               string         `json:"symbol"`
+	Price                float32        `json:"price"`
+	Supply               int64          `json:"supply"`
+	MaintainerAllocation float32        `json:"maintainerAllocation"`
+	Address              common.Address `json:"address"`
 }
 
 
@@ -36,6 +40,10 @@ func (con Connection) postProject(c *gin.Context) {
 	var p Project
 	session := sessions.Default(c)
 	userId := session.Get("user-id")
+
+	// Deploy contract and store address; wait for execution to complete
+	p.Token.Address = utilities.DeployToken(p.Token.Name, p.Token.Symbol, p.Token.Supply)
+	log.Printf("Contract pending deploy: 0x%x\n", p.Token.Address)
 
 	// Find ID of current user
 	var user struct {
@@ -91,6 +99,9 @@ func (con Connection) getProject(c *gin.Context) {
 
 	log.Printf("%v", projectsFiltered[0])
 	c.IndentedJSON(http.StatusFound, projectsFiltered[0])
+
+	// TEST: Get project from Ethereum
+	utilities.Fetch()
 }
 
 func (con Connection) listProjects(c *gin.Context) {

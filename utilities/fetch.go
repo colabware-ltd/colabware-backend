@@ -1,4 +1,4 @@
-package main
+package utilities
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-func main() {
+func Fetch() {
 	// connect to an ethereum node  hosted by infura
 	blockchain, err := ethclient.Dial("https://rinkeby.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
 
@@ -18,12 +18,12 @@ func main() {
 	}
 
 	// Create a new instance of the Project contract bound to a specific deployed contract
-	contract, err := contracts.NewProject(common.HexToAddress("0xa6ddad0fdcb3b50357352bb1dceeea5033c9d24f"), blockchain)
+	contract, err := contracts.NewProject(common.HexToAddress("0x9f9e9b79dfb823617d8147cdcb3fb53d4e42a589"), blockchain)
 	if err != nil {
 		log.Fatalf("Unable to bind to deployed instance of contract:%v\n")
 	}
 
-	fmt.Println(contract)
-	fmt.Println("Hello!")
+	tokens, err := contract.GetTokens(nil)
 
+	fmt.Println(tokens[0].TokenAddress)
 }
