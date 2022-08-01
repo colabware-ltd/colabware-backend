@@ -27,9 +27,12 @@ func initializeRoutes(c Connection) {
 	authorized := router.Group("/api/user")
 	authorized.Use(authorizeRequest())
 	{
+		
 		authorized.POST("/project", c.postProject)
+		authorized.GET("/logout", c.logout)
+		authorized.GET("/", c.getUser)
 	}
-	router.GET("/", hello)
+	router.GET("/api", hello)
 	router.GET("/api/project/:name", c.getProject)
 	router.POST("/createwallet", c.createWallet)
 	router.POST("/transfer", c.transfer)

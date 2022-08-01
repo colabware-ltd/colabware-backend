@@ -11,6 +11,8 @@ import (
 	"github.com/gin-contrib/sessions"
 	"golang.org/x/oauth2"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+
 )
 
 type User struct {
@@ -23,6 +25,7 @@ type User struct {
 	Email         string `json:"email"`
 	EmailVerified bool   `json:"email_verified"`
 	WalletAddress string `json:"wallet_address"`
+	ProjectsMaintained []primitive.ObjectID `json:"projects_maintained"`
 }
 
 func loginHandler(c *gin.Context) {
@@ -31,10 +34,34 @@ func loginHandler(c *gin.Context) {
 	session.Set("state", state)
     session.Save()
 	fmt.Println("Saved session: ", session.Get("state"))
-	c.Writer.Write([]byte("<html><title>Golang Google</title> <body> <a href='" + getLoginURL(state) + "'><button>Login with Google!</button> </a> </body></html>"))
-	// Send login URL with state to client in JSON data
-	// jsonData := []byte(`{"msg":"Authenticated!"}`)
-	// c.Data(http.StatusOK, "application/json", jsonData)
+	c.JSON(http.StatusOK, gin.H{"url": getLoginURL(state)})
+}
+
+func (con Connection) getUser(c *gin.Context) {
+	session := sessions.Default(c)
+	userId := session.Get("user-id")
+	log.Printf(fmt.Sprint(userId))
+	filterCursor, err := con.Users.Find(context.TODO(), bson.M{"email": userId})
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	var usersFiltered []bson.M
+	err = filterCursor.All(context.TODO(), &usersFiltered)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	if len(usersFiltered) == 0 {
+		log.Printf("no user found")
+		c.IndentedJSON(http.StatusOK, "no user found")
+		return
+	}
+	log.Printf("%v", usersFiltered[0])
+	c.JSON(http.StatusFound, usersFiltered[0])
+	// c.IndentedJSON(http.StatusFound, usersFiltered[0])
 }
 
 func (con Connection) authHandler(c *gin.Context) {
@@ -104,5 +131,16 @@ func (con Connection) authHandler(c *gin.Context) {
 		}
 
 	}
-    c.Status(http.StatusOK)
+    c.Redirect(http.StatusFound, "/")
+	
+}
+
+func (con Connection) logout(c *gin.Context) {
+	session := sessions.Default(c)
+	session.Delete("user-id")
+	err := session.Save()
+	if err != nil {
+		log.Println(err)
+		return
+	}
 }
