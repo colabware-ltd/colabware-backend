@@ -34,6 +34,7 @@ func initializeRoutes(c Connection) {
 	}
 	router.GET("/api", hello)
 	router.GET("/api/project/:name", c.getProject)
+	router.GET("/api/project/list", c.listProjects)
 	router.POST("/createwallet", c.createWallet)
 	router.POST("/transfer", c.transfer)
 	router.GET("/login", loginHandler)
