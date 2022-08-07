@@ -19,13 +19,14 @@ import (
 // TODO: Create wallet for project upon creation. Maintainers should then
 // be able to access this wallet. Wallet should hold maintainer tokens.
 type Project struct {
-	Name        string   `json:"name"`
-	Repository  string   `json:"repository"`
-	Description string   `json:"description"`
-	Categories  []string `json:"categories"`
-	Maintainers []primitive.ObjectID `json:"maintainers"`
-	Token       Token    `json:"token"`
-	Address              common.Address `json:"address"`
+	Name           string               `json:"name"`
+	Repository     string               `json:"repository"`
+	Description    string               `json:"description"`
+	Categories     []string             `json:"categories"`
+	Maintainers    []primitive.ObjectID `json:"maintainers"`
+	Token          Token                `json:"token"`
+	ProjectAddress common.Address       `json:"projectAddress"`
+	ProjectWallet  Wallet               `json:"wallet"`
 }
 
 type Token struct {
@@ -47,9 +48,12 @@ func (con Connection) postProject(c *gin.Context) {
 		return
 	}
 
+	// TODO: Create wallet for project and get address; initial project tokens should be minted for this address.
+	 p.ProjectWallet = con.createWallet(p.Name)
+
 	// Deploy contract and store address; wait for execution to complete
-	p.Address = utilities.DeployProject(p.Token.Name, p.Token.Symbol, p.Token.TotalSupply, p.Token.MaintainerSupply)
-	log.Printf("Contract pending deploy: 0x%x\n", p.Address)
+	p.ProjectAddress = utilities.DeployProject(p.Token.Name, p.Token.Symbol, p.Token.TotalSupply, p.Token.MaintainerSupply, p.ProjectWallet.Address)
+	log.Printf("Contract pending deploy: 0x%x\n", p.ProjectAddress)
 	
 	// Find ID of current user
 	var user struct {
@@ -90,7 +94,7 @@ func (con Connection) getProject(c *gin.Context) {
 	c.IndentedJSON(http.StatusFound, project)
 
 	// TEST: Get project from Ethereum
-	totalSupply, err := utilities.FetchProject(project.Address)
+	totalSupply, err := utilities.FetchProject(project.ProjectAddress)
 
 	fmt.Printf("total:%d\n", totalSupply)
 }

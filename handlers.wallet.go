@@ -41,62 +41,13 @@ type TransferReuest struct {
 	Amount     float64 `json:"amount" binding:"required"`
 }
 
-func (con Connection) createWallet(c *gin.Context) {
+func (con Connection) postWallet(c *gin.Context) {
 	var r CreateWalletReuest
 	if err := c.BindJSON(&r); err != nil {
 		log.Printf("%v", err)
 		return
 	}
-
-	privateKey, err := crypto.GenerateKey()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Covert private key to bytes
-	privateKeyBytes := crypto.FromECDSA(privateKey)
-
-	// Save this to the database
-	privateKeyHex := hexutil.Encode(privateKeyBytes)[2:]
-	log.Println(privateKeyHex)
-
-	// Derive public key from private key
-	publicKey := privateKey.Public()
-	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok {
-		log.Fatal("error casting public key to ECDSA")
-	}
-	publicKeyBytes := crypto.FromECDSAPub(publicKeyECDSA)
-	publicKeyHex := hexutil.Encode(publicKeyBytes)[4:]
-	log.Println(publicKeyHex)
-
-	// Derive Address from public key
-	address := crypto.PubkeyToAddress(*publicKeyECDSA).Hex()
-	log.Println(address)
-
-	w := Wallet{
-		Name:       r.Name,
-		PrivateKey: privateKeyHex,
-		PublicKey:  publicKeyHex,
-		Address:    address,
-	}
-
-	// Make 'name' the unique index that identifies the wallets
-	con.Wallets.Indexes().CreateOne(
-		context.Background(),
-		mongo.IndexModel{
-			Keys:    bson.D{{Key: "name", Value: 1}},
-			Options: options.Index().SetUnique(true),
-		},
-	)
-
-	_, err = con.Wallets.InsertOne(context.TODO(), w)
-	// TODO: Update user object with created project
-	if err != nil {
-		log.Printf("%v", err)
-		return
-	}
-
+	w := con.createWallet(r.Name)
 	c.IndentedJSON(http.StatusCreated, w)
 }
 
@@ -165,6 +116,57 @@ func (con Connection) transfer(c *gin.Context) {
 	log.Printf("tx sent: %s", signedTx.Hash().Hex())
 	c.IndentedJSON(http.StatusOK, "tx sent")
 	return
+}
+
+func (con Connection) createWallet(name string) Wallet {
+	privateKey, err := crypto.GenerateKey()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Covert private key to bytes
+	privateKeyBytes := crypto.FromECDSA(privateKey)
+
+	// Save this to the database
+	privateKeyHex := hexutil.Encode(privateKeyBytes)[2:]
+	log.Println(privateKeyHex)
+
+	// Derive public key from private key
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		log.Fatal("error casting public key to ECDSA")
+	}
+	publicKeyBytes := crypto.FromECDSAPub(publicKeyECDSA)
+	publicKeyHex := hexutil.Encode(publicKeyBytes)[4:]
+	log.Println(publicKeyHex)
+
+	// Derive Address from public key
+	address := crypto.PubkeyToAddress(*publicKeyECDSA).Hex()
+	log.Println(address)
+
+	w := Wallet{
+		Name:       name,
+		PrivateKey: privateKeyHex,
+		PublicKey:  publicKeyHex,
+		Address:    address,
+	}
+
+	// Make 'name' the unique index that identifies the wallets
+	con.Wallets.Indexes().CreateOne(
+		context.Background(),
+		mongo.IndexModel{
+			Keys:    bson.D{{Key: "name", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+	)
+
+	_, err = con.Wallets.InsertOne(context.TODO(), w)
+	// TODO: Update user object with created project
+	if err != nil {
+		log.Printf("%v", err)
+	}
+	return w
 }
 
 func weiToEther(wei *big.Int) *big.Float {

@@ -15,7 +15,7 @@ import (
 // TODO: Update to refer to current user
 const key = `{"address":"1bc22202dc39a523ebe114724a6e6f428031edd4","crypto":{"cipher":"aes-128-ctr","ciphertext":"f66e3e8398ab89f4ce51828f17d5e026d3c17ebbf86bdd8fd3f4cd3cd8bfccb6","cipherparams":{"iv":"7324b9b6cbdbb9f069e526d06d730e31"},"kdf":"scrypt","kdfparams":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"7d34704545a545a7157ae4ce9e6d757d8ad9812530b900a71c97207ae080f1de"},"mac":"b66f97f02751e01578a5eb5e2beca856b2d8bdc4bd14a39b455d7e32b9d259dd"},"id":"ee0f9732-05ab-49eb-b67e-1fc1870c3a7a","version":3}`
 
-func DeployProject(name string, symbol string, totalSupply int64, maintainerSupply int64) common.Address {
+func DeployProject(tokenName string, tokenSymbol string, totalSupply int64, maintainerSupply int64, walletAddress string) common.Address {
 	// connect to an ethereum node  hosted by infura
 	blockchain, err := ethclient.Dial("https://rinkeby.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
 
@@ -36,10 +36,11 @@ func DeployProject(name string, symbol string, totalSupply int64, maintainerSupp
 	address, _, _, err := contracts.DeployProject(
 		auth,
 		blockchain,
-		name,
-		symbol,
+		tokenName,
+		tokenSymbol,
 		big.NewInt(totalSupply),
 		big.NewInt(maintainerSupply),
+		common.HexToAddress(walletAddress),
 	)
 
 	if err != nil {
