@@ -1,15 +1,15 @@
 package utilities
 
 import (
-	"fmt"
 	"log"
+	"math/big"
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-func main() {
+func FetchProject(address common.Address) (*big.Int, error) {
 	// connect to an ethereum node hosted by infura
 	blockchain, err := ethclient.Dial("https://rinkeby.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
 
@@ -18,12 +18,11 @@ func main() {
 	}
 
 	// Create a new instance of the Project contract bound to a specific deployed contract
-	contract, err := contracts.NewProject(common.HexToAddress("0x9f9e9b79dfb823617d8147cdcb3fb53d4e42a589"), blockchain)
+	contract, err := contracts.NewProject(address, blockchain)
 	if err != nil {
 		log.Fatalf("Unable to bind to deployed instance of contract:%v\n")
 	}
 
-	tokens, err := contract.GetTokens(nil)
-
-	fmt.Println(tokens[0].TokenAddress)
+	// Return total and maintainer token supply values
+	return contract.GetTokenSupply(nil);
 }
