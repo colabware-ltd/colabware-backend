@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -18,21 +19,23 @@ import (
 // TODO: Create wallet for project upon creation. Maintainers should then
 // be able to access this wallet. Wallet should hold maintainer tokens.
 type Project struct {
-	Name        string   `json:"name"`
-	Repository  string   `json:"repository"`
-	Description string   `json:"description"`
-	Categories  []string `json:"categories"`
-	Maintainers []primitive.ObjectID `json:"maintainers"`
-	Token       Token    `json:"token"`
+	Name           string               `json:"name"`
+	Repository     string               `json:"repository"`
+	Description    string               `json:"description"`
+	Categories     []string             `json:"categories"`
+	Maintainers    []primitive.ObjectID `json:"maintainers"`
+	Token          Token                `json:"token"`
+	ProjectAddress common.Address       `json:"projectAddress"`
+	// ProjectWallet  Wallet               `json:"wallet"`
+	ProjectWallet  primitive.ObjectID   `json:"wallet"`
 }
 
 type Token struct {
-	Name                 string         `json:"name"`
-	Symbol               string         `json:"symbol"`
-	Price                float32        `json:"price"`
-	Supply               int64          `json:"supply"`
-	MaintainerAllocation float32        `json:"maintainerAllocation"`
-	Address              common.Address `json:"address"`
+	Name             string  `json:"name"`
+	Symbol           string  `json:"symbol"`
+	Price            float32 `json:"price"`
+	TotalSupply      int64   `json:"totalSupply"`
+	MaintainerSupply int64   `json:"maintainerSupply"`
 }
 
 
@@ -41,10 +44,18 @@ func (con Connection) postProject(c *gin.Context) {
 	session := sessions.Default(c)
 	userId := session.Get("user-id")
 
-	// Deploy contract and store address; wait for execution to complete
-	p.Token.Address = utilities.DeployToken(p.Token.Name, p.Token.Symbol, p.Token.Supply)
-	log.Printf("Contract pending deploy: 0x%x\n", p.Token.Address)
+	if err := c.BindJSON(&p); err != nil {
+		log.Printf("%v", err)
+		return
+	}	
 
+	// TODO: Create wallet for project and get address; initial project tokens should be minted for this address.
+	 p.ProjectWallet,_ = con.createWallet(p.Name)
+
+	// Deploy contract and store address; wait for execution to complete
+	p.ProjectAddress = utilities.DeployProject(p.Token.Name, p.Token.Symbol, p.Token.TotalSupply, p.Token.MaintainerSupply, con.getWallet(p.Name).Address)
+	log.Printf("Contract pending deploy: 0x%x\n", p.ProjectAddress)
+	
 	// Find ID of current user
 	var user struct {
 		ID primitive.ObjectID `bson:"_id, omitempty"`
@@ -54,13 +65,8 @@ func (con Connection) postProject(c *gin.Context) {
 		log.Printf("%v", e)
 		return
 	}
-
-	// Add current user to project maintainers
 	p.Maintainers = append(p.Maintainers, user.ID)
-	if err := c.BindJSON(&p); err != nil {
-		log.Printf("%v", err)
-		return
-	}
+
 	result, err := con.Projects.InsertOne(context.TODO(), p)
 
 	selector := bson.M{"_id": user.ID}
@@ -78,30 +84,20 @@ func (con Connection) postProject(c *gin.Context) {
 
 func (con Connection) getProject(c *gin.Context) {
 	name := c.Param("name")
-	filterCursor, err := con.Projects.Find(context.TODO(), bson.M{"name": name})
-	if err != nil {
-		log.Printf("%v", err)
-		c.IndentedJSON(http.StatusInternalServerError, nil)
-		return
-	}
-	var projectsFiltered []bson.M
-	err = filterCursor.All(context.TODO(), &projectsFiltered)
-	if err != nil {
-		log.Printf("%v", err)
-		c.IndentedJSON(http.StatusInternalServerError, nil)
-		return
-	}
-	if len(projectsFiltered) == 0 {
-		log.Printf("no item found")
-		c.IndentedJSON(http.StatusOK, "no item found")
-		return
-	}
 
-	log.Printf("%v", projectsFiltered[0])
-	c.IndentedJSON(http.StatusFound, projectsFiltered[0])
+	var project Project
+	err := con.Projects.FindOne(context.TODO(), bson.M{"name": name}).Decode(&project)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	c.IndentedJSON(http.StatusFound, project)
 
 	// TEST: Get project from Ethereum
-	utilities.Fetch()
+	totalSupply, err := utilities.FetchProject(project.ProjectAddress)
+
+	fmt.Printf("total:%d\n", totalSupply)
 }
 
 func (con Connection) listProjects(c *gin.Context) {
