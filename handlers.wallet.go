@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
@@ -47,7 +48,7 @@ func (con Connection) postWallet(c *gin.Context) {
 		log.Printf("%v", err)
 		return
 	}
-	w := con.createWallet(r.Name)
+	_, w := con.createWallet(r.Name)
 	c.IndentedJSON(http.StatusCreated, w)
 }
 
@@ -118,7 +119,7 @@ func (con Connection) transfer(c *gin.Context) {
 	return
 }
 
-func (con Connection) createWallet(name string) Wallet {
+func (con Connection) createWallet(name string) (primitive.ObjectID, Wallet) {
 	privateKey, err := crypto.GenerateKey()
 	if err != nil {
 		log.Fatal(err)
@@ -161,12 +162,12 @@ func (con Connection) createWallet(name string) Wallet {
 		},
 	)
 
-	_, err = con.Wallets.InsertOne(context.TODO(), w)
+	result, err := con.Wallets.InsertOne(context.TODO(), w)
 	// TODO: Update user object with created project
 	if err != nil {
 		log.Printf("%v", err)
 	}
-	return w
+	return result.InsertedID.(primitive.ObjectID), w
 }
 
 func weiToEther(wei *big.Int) *big.Float {
@@ -183,6 +184,7 @@ func etherToWei(eth *big.Float) *big.Int {
 	return wei
 }
 
+// TODO: Search by ID instead of walletName
 func (con Connection) getWallet(walletName string) *Wallet {
 	wallet := &Wallet{}
 	result := con.Wallets.FindOne(context.TODO(), bson.M{"name": walletName})

@@ -26,7 +26,8 @@ type Project struct {
 	Maintainers    []primitive.ObjectID `json:"maintainers"`
 	Token          Token                `json:"token"`
 	ProjectAddress common.Address       `json:"projectAddress"`
-	ProjectWallet  Wallet               `json:"wallet"`
+	// ProjectWallet  Wallet               `json:"wallet"`
+	ProjectWallet  primitive.ObjectID   `json:"wallet"`
 }
 
 type Token struct {
@@ -46,13 +47,13 @@ func (con Connection) postProject(c *gin.Context) {
 	if err := c.BindJSON(&p); err != nil {
 		log.Printf("%v", err)
 		return
-	}
+	}	
 
 	// TODO: Create wallet for project and get address; initial project tokens should be minted for this address.
-	 p.ProjectWallet = con.createWallet(p.Name)
+	 p.ProjectWallet,_ = con.createWallet(p.Name)
 
 	// Deploy contract and store address; wait for execution to complete
-	p.ProjectAddress = utilities.DeployProject(p.Token.Name, p.Token.Symbol, p.Token.TotalSupply, p.Token.MaintainerSupply, p.ProjectWallet.Address)
+	p.ProjectAddress = utilities.DeployProject(p.Token.Name, p.Token.Symbol, p.Token.TotalSupply, p.Token.MaintainerSupply, con.getWallet(p.Name).Address)
 	log.Printf("Contract pending deploy: 0x%x\n", p.ProjectAddress)
 	
 	// Find ID of current user
