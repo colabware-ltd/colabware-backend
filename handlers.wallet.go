@@ -25,6 +25,8 @@ import (
 )
 
 type Wallet struct {
+	Project    primitive.ObjectID `json:"project"` // ID of Project if Project wallet
+	User    primitive.ObjectID `json:"user"` // ID of User if User wallet
 	Name       string `json:"name"`
 	PrivateKey string `json:"privateKey"`
 	PublicKey  string `json:"publicKey"`
