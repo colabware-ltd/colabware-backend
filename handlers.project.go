@@ -26,8 +26,9 @@ type Project struct {
 	Maintainers    []primitive.ObjectID `json:"maintainers"`
 	Token          Token                `json:"token"`
 	ProjectAddress common.Address       `json:"projectAddress"`
-	// ProjectWallet  Wallet               `json:"wallet"`
 	ProjectWallet  primitive.ObjectID   `json:"wallet"`
+	Requests       []Request            `json:"requests"`
+	Roadmap        []Request            `json:"roadmap"`
 }
 
 type Token struct {
@@ -38,6 +39,24 @@ type Token struct {
 	MaintainerSupply int64   `json:"maintainerSupply"`
 }
 
+type Request struct {
+	Creator      primitive.ObjectID 
+	Name         string             `json:"name"`
+	Description  string             `json:"description"`
+	Category     string             `json:"category"`
+	Backers      []Backer    `json:"backers"`
+	Voters       []Voter            `json:"voters"`
+}
+
+type Backer struct {
+	Creator primitive.ObjectID `json:"creator"`
+	Amount  float32            `json:"amount"`
+}
+
+type Voter struct {
+	Creator    primitive.ObjectID `json:"user"`
+	TokensHeld int64              `json:"tokens"`
+}
 
 func (con Connection) postProject(c *gin.Context) {
 	var p Project
@@ -80,6 +99,66 @@ func (con Connection) postProject(c *gin.Context) {
 		return
 	}
 	c.IndentedJSON(http.StatusCreated, p)
+}
+
+func (con Connection) postRequest(c *gin.Context) {
+	name := c.Param("name")
+	var r Request
+	if err := c.BindJSON(&r); err != nil {
+		log.Printf("%v", err)
+		return
+	}
+
+	userId := sessions.Default(c).Get("user-id")
+	var user struct {
+		ID primitive.ObjectID `bson:"_id, omitempty"`
+	}
+	e := con.Users.FindOne(context.TODO(), bson.M{"email": userId}).Decode(&user)
+	if e != nil { 
+		log.Printf("%v", e)
+		return
+	}
+	r.Creator = user.ID
+
+	// TODO: Handle payment of initial bounty set by user
+
+	update := bson.M{
+		"$push": bson.M{"requests": r},
+	}
+	_, err := con.Projects.UpdateOne(context.TODO(), bson.M{"name": name}, update)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+	c.IndentedJSON(http.StatusCreated, r)
+}
+
+func (con Connection) postVote(c *gin.Context) {
+	name := c.Param("name")
+	var v Voter
+
+	userId := sessions.Default(c).Get("user-id")
+	var user struct {
+		ID primitive.ObjectID `bson:"_id, omitempty"`
+	}
+	e := con.Users.FindOne(context.TODO(), bson.M{"email": userId}).Decode(&user)
+	if e != nil { 
+		log.Printf("%v", e)
+		return
+	}
+	v.Creator = user.ID
+
+	// TODO: Lookup tokens held by voter on contract
+
+	update := bson.M{
+		"$push": bson.M{"voters": v},
+	}
+	_, err := con.Projects.UpdateOne(context.TODO(), bson.M{"name": name}, update)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+	c.IndentedJSON(http.StatusCreated, v)
 }
 
 func (con Connection) getProject(c *gin.Context) {

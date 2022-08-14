@@ -27,8 +27,8 @@ func initializeRoutes(c Connection) {
 	authorized := router.Group("/api/user")
 	authorized.Use(authorizeRequest())
 	{
-		
 		authorized.POST("/project", c.postProject)
+		authorized.POST("/project/:name/request", c.postRequest)
 		authorized.GET("/logout", c.logout)
 		authorized.GET("/", c.getUser)
 	}
