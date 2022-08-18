@@ -18,6 +18,7 @@ var store = cookie.NewStore([]byte("secret"))
 
 type Connection struct {
 	Projects *mongo.Collection
+	Requests *mongo.Collection
 	Users    *mongo.Collection
 	Wallets  *mongo.Collection
 }
@@ -61,6 +62,7 @@ func main() {
 	defer client.Disconnect(context.Background())
 	conn := Connection{
 		Projects: client.Database("colabware").Collection("projects"),
+		Requests: client.Database("colabware").Collection("requests"),
 		Users:    client.Database("colabware").Collection("users"),
 		Wallets:  client.Database("colabware").Collection("wallets"),
 	}
