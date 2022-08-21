@@ -25,11 +25,19 @@ contract Project {
         wallet = _wallet;
     }
 
-    function getMaintainerTokens() public view returns (uint256) {
+    function getReservedTokens() public view returns (uint256) {
         return reservedTokens;
     }
 
     function getTokenSupply() public view returns (uint256) {
         return token.totalSupply();
+    }
+
+    function getBalance(address account) public view returns (uint256) {
+        return token.balanceOf(account);
+    }
+
+    function listBalances() public view returns (uint256, uint256, uint256) {
+        return (this.getBalance(wallet), getReservedTokens(), this.getTokenSupply() - this.getBalance(wallet));
     }
 }

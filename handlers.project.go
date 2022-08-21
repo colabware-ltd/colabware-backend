@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/colabware-ltd/colabware-backend/contracts"
 	"github.com/colabware-ltd/colabware-backend/utilities"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
@@ -40,24 +42,13 @@ type Token struct {
 
 func (con Connection) postProject(c *gin.Context) {
 	var p Project
-	session := sessions.Default(c)
-	userId := session.Get("user-id")
-
 	if err := c.BindJSON(&p); err != nil {
 		log.Printf("%v", err)
 		return
 	}
-
-	// TODO: Add validation to check whether project with name exists
-
-	// TODO: Create wallet for project and get address; initial project tokens should be minted for this address.
-	 p.ProjectWallet,_ = con.createWallet(p.Name)
-
-	// Deploy contract and store address; wait for execution to complete
-	p.ProjectAddress = utilities.DeployProject(p.Token.Name, p.Token.Symbol, p.Token.TotalSupply, p.Token.MaintainerSupply, con.getWallet(p.Name).Address)
-	log.Printf("Contract pending deploy: 0x%x\n", p.ProjectAddress)
-	
-	// Find ID of current user
+	session := sessions.Default(c)
+	// TODO: Update session to store db ID
+	userId := session.Get("user-id")
 	var user struct {
 		ID primitive.ObjectID `bson:"_id, omitempty"`
 	}
@@ -68,18 +59,38 @@ func (con Connection) postProject(c *gin.Context) {
 	}
 	p.Maintainers = append(p.Maintainers, user.ID)
 
+	// TODO: Add validation to check whether project with name exists
 	result, err := con.Projects.InsertOne(context.TODO(), p)
-
 	selector := bson.M{"_id": user.ID}
 	update := bson.M{
 		"$push": bson.M{"projects_maintained": result.InsertedID},
 	}
 	_, err = con.Users.UpdateOne(context.TODO(), selector, update)
-
 	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
+
+	// Create wallet for project and get address; initial project tokens will be minted for this address.
+	walletId, wallet := con.createWallet(result.InsertedID.(primitive.ObjectID))
+
+	// Deploy contract and store address; wait for execution to complete
+	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, p.Token.TotalSupply, p.Token.MaintainerSupply, wallet.Address)
+	log.Printf("Contract pending deploy: 0x%x\n", projectAddress)
+
+	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
+	update = bson.M{
+		"$set": bson.M{
+			"projectwallet": walletId,
+			"projectaddress": projectAddress.Hex(),
+		},
+	}
+	_, err = con.Projects.UpdateOne(context.TODO(), selector, update)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+
 	c.IndentedJSON(http.StatusCreated, p)
 }
 
@@ -92,10 +103,33 @@ func (con Connection) getProject(c *gin.Context) {
 		log.Printf("%v", err)
 		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
-	}
-	c.IndentedJSON(http.StatusFound, project)
+	}	
+	c.IndentedJSON(http.StatusFound, project)	
+}
 
-	// TODO: Get data from Ethereum contract
+func (con Connection) getProjectBalances(c *gin.Context) {
+	project := c.Param("name")
+
+	client, err := ethclient.Dial("https://rinkeby.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	if err != nil {
+		log.Fatalf("Unable to connect to network:%v\n", err)
+		return
+	}
+
+	// Create contract binding
+	contract, err := contracts.NewProjectCaller(common.HexToAddress(project), client)
+	if err != nil {
+		log.Fatalf("Unable to create contract binding:%v\n", err)
+		return
+	}
+
+	maintainerBalance, maintainerReserved, investorBalance, _ := contract.ListBalances(nil)
+
+	c.IndentedJSON(http.StatusFound, gin.H{
+		"maintainerBalance": maintainerBalance, 
+		"maintainerReserved": maintainerReserved, 
+		"investorBalance": investorBalance,
+	})
 }
 
 func (con Connection) listProjects(c *gin.Context) {
