@@ -17,6 +17,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/params"
@@ -33,12 +34,12 @@ type CreateWallet struct {
 	Owner primitive.ObjectID `json:"owner"`
 }
 
-// type TransferReuest struct {
-// 	// 'Wallet Name' must match an existing wallet in the database
-// 	WalletName string  `json:"walletName" binding:"required"`
-// 	To         string  `json:"to" binding:"required"`
-// 	Amount     float64 `json:"amount" binding:"required"`
-// }
+type TransferRequest struct {
+	// 'Wallet Name' must match an existing wallet in the database
+	Wallet primitive.ObjectID `json:"walletName" binding:"required"`
+	To     string             `json:"to" binding:"required"`
+	Amount float64            `json:"amount" binding:"required"`
+}
 
 type ReadBalance struct {
 	Wallet         string         `json:"wallet"`
@@ -55,72 +56,73 @@ func (con Connection) postWallet(c *gin.Context) {
 	c.IndentedJSON(http.StatusCreated, wallet)
 }
 
-// func (con Connection) transfer(c *gin.Context) {
-// 	var r TransferReuest
-// 	if err := c.BindJSON(&r); err != nil {
-// 		log.Printf("%v", err)
-// 		return
-// 	}
+func (con Connection) transfer(c *gin.Context) {
+	var r TransferRequest
+	if err := c.BindJSON(&r); err != nil {
+		log.Printf("%v", err)
+		return
+	}
 
-// 	wallet := con.getWallet(r.WalletName)
-// 	if wallet == nil {
-// 		c.IndentedJSON(http.StatusOK, "Wallet not found")
-// 	}
+	wallet := con.getWallet(r.Wallet)
+	if wallet == nil {
+		c.IndentedJSON(http.StatusOK, "Wallet not found")
+	}
 
-// 	// connect to an ethereum node  hosted by infura
-// 	client, err := ethclient.Dial("https://rinkeby.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	// connect to an ethereum node  hosted by infura
+	client, err := ethclient.Dial("https://rinkeby.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
 
-// 	if err != nil {
-// 		log.Printf("Unable to connect to network:%v\n", err)
-// 		return
-// 	}
+	if err != nil {
+		log.Printf("Unable to connect to network:%v\n", err)
+		return
+	}
 
-// 	nonce, err := client.PendingNonceAt(context.Background(), common.HexToAddress(wallet.Address))
-// 	if err != nil {
-// 		log.Print(err)
-// 		return
-// 	}
+	nonce, err := client.PendingNonceAt(context.Background(), common.HexToAddress(wallet.Address))
+	if err != nil {
+		log.Print(err)
+		return
+	}
 
-// 	gasLimit := uint64(21000)
-// 	gasPrice, err := client.SuggestGasPrice(context.Background())
-// 	if err != nil {
-// 		log.Print(err)
-// 		return
-// 	}
+	gasLimit := uint64(21000)
+	gasPrice, err := client.SuggestGasPrice(context.Background())
+	if err != nil {
+		log.Print(err)
+		return
+	}
 
-// 	toAddress := common.HexToAddress(r.To)
-// 	var data []byte
-// 	val := new(big.Float).SetFloat64(r.Amount)
-// 	tx := types.NewTransaction(nonce, toAddress, etherToWei(val), gasLimit, gasPrice, data)
+	toAddress := common.HexToAddress(r.To)
+	var data []byte
+	val := new(big.Float).SetFloat64(r.Amount)
+	tx := types.NewTransaction(nonce, toAddress, etherToWei(val), gasLimit, gasPrice, data)
 
-// 	privateKeyByte, err := hexutil.Decode("0x" + wallet.PrivateKey)
-// 	if err != nil {
-// 		log.Print(err)
-// 		return
-// 	}
+	privateKeyByte, err := hexutil.Decode("0x" + wallet.PrivateKey)
+	if err != nil {
+		log.Print(err)
+		return
+	}
 
-// 	privateKey, err := crypto.ToECDSA(privateKeyByte)
-// 	if err != nil {
-// 		log.Print(err)
-// 		return
-// 	}
+	privateKey, err := crypto.ToECDSA(privateKeyByte)
+	if err != nil {
+		log.Print(err)
+		return
+	}
 
-// 	signedTx, err := types.SignTx(tx, types.HomesteadSigner{}, privateKey)
-// 	if err != nil {
-// 		log.Print(err)
-// 		return
-// 	}
+	signedTx, err := types.SignTx(tx, types.HomesteadSigner{}, privateKey)
+	if err != nil {
+		log.Print(err)
+		return
+	}
 
-// 	err = client.SendTransaction(context.Background(), signedTx)
-// 	if err != nil {
-// 		log.Print(err)
-// 		return
-// 	}
+	// TODO: Convert to interface to handle user transactions.
+	err = client.SendTransaction(context.Background(), signedTx)
+	if err != nil {
+		log.Print(err)
+		return
+	}
 
-// 	log.Printf("tx sent: %s", signedTx.Hash().Hex())
-// 	c.IndentedJSON(http.StatusOK, "tx sent")
-// 	return
-// }
+	log.Printf("tx sent: %s", signedTx.Hash().Hex())
+	c.IndentedJSON(http.StatusOK, "tx sent")
+	return
+}
 
 func (con Connection) createWallet(owner primitive.ObjectID) (primitive.ObjectID, Wallet) {
 	privateKey, err := crypto.GenerateKey()
