@@ -74,7 +74,7 @@ func main() {
 	initializeRoutes(conn)
 
 	// Start serving the application
-	err = router.Run(":9999")
+	err = router.Run("localhost:9998")
 	if err != nil {
 		log.Fatal(err)
 	}

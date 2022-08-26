@@ -40,8 +40,8 @@ func initializeRoutes(c Connection) {
 	router.GET("/api/project/:name/request/list", c.listRequests)
 	router.GET("/api/project/:name/balance/:wallet", c.getBalance)
 	router.GET("/api/project/:name/balances", c.getProjectBalances)	
-	router.POST("/createwallet", c.postWallet)
-	// router.POST("/transfer", c.transfer)
-	router.GET("/login", loginHandler)
-	router.GET("/auth", c.authHandler)
+	router.POST("/api/createwallet", c.postWallet)
+	// router.POST("/api/transfer", c.transfer)
+	router.GET("/api/login", loginHandler)
+	router.GET("/api/auth", c.authHandler)
 }
