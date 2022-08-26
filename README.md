@@ -37,8 +37,8 @@ abigen -sol inbox.sol -pkg contracts -out inbox.go
 
 For abigen v >1.10.20...
 
-Generate contract ABI using `solc --abi Project.sol -o build`
-Generate contract bytecode using `solc --bin Project.sol -o bin`
+Generate contract ABI using `solc --abi Project.sol -o build --overwrite`
+Generate contract bytecode using `solc --bin Project.sol -o bin --overwrite`
 Generate contract bindings using `abigen --abi ./build/Project.abi --pkg contracts --type Project --out Project.go --bin ./bin/Project.bin`
 
 # How to run

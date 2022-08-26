@@ -27,16 +27,21 @@ func initializeRoutes(c Connection) {
 	authorized := router.Group("/api/user")
 	authorized.Use(authorizeRequest())
 	{
-
 		authorized.POST("/project", c.postProject)
+		authorized.POST("/project/:id/request", c.postRequest)
+		// authorized.POST("/project/:project/request/:request/vote", c.postRequestVote)
+		// authorized.POST("/project/:project/request/:request/response", c.postRequestResponse)
 		authorized.GET("/logout", c.logout)
 		authorized.GET("/", c.getUser)
 	}
 	router.GET("/api", hello)
 	router.GET("/api/project/:name", c.getProject)
 	router.GET("/api/project/list", c.listProjects)
+	router.GET("/api/project/:name/request/list", c.listRequests)
+	router.GET("/api/project/:name/balance/:wallet", c.getBalance)
+	router.GET("/api/project/:name/balances", c.getProjectBalances)	
 	router.POST("/api/createwallet", c.postWallet)
-	router.POST("/api/transfer", c.transfer)
+	// router.POST("/api/transfer", c.transfer)
 	router.GET("/api/login", loginHandler)
 	router.GET("/api/auth", c.authHandler)
 }
