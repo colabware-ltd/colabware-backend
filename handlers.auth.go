@@ -15,6 +15,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+var client *http.Client
+
 type User struct {
 	Login              string               `json:"login"`
 	Avatar             string               `json:"avatar_url"`
@@ -72,7 +74,7 @@ func (con Connection) authHandler(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
         return
 	}
-	client := conf.Client(oauth2.NoContext, tok)
+	client = conf.Client(oauth2.NoContext, tok)
 
 	// Ger information about the user
 	userInfo, err := client.Get("https://api.github.com/user")

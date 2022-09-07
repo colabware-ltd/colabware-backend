@@ -35,7 +35,7 @@ func initAuth() {
         // Update RedirectURL
         RedirectURL:  "http://localhost:3000/api/auth",
         Scopes: []string{
-            "https://github.com/login/oauth/authorize?client_id=eaf969af655329a70640&scope=read:user%20user:email",
+            "public_repo",
         },
         Endpoint: oauth2.Endpoint{
             AuthURL:  "https://github.com/login/oauth/authorize",
