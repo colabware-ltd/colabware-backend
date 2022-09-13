@@ -1,15 +1,15 @@
 package main
 
 import (
-    "crypto/rand"
-    "encoding/base64"
-    "encoding/json"
-    "io/ioutil"
-    "fmt"
-    "os"
-    "golang.org/x/oauth2"
-    "golang.org/x/oauth2/google"
-) 
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"os"
+
+	"golang.org/x/oauth2"
+)
 
 // Credentials which stores google ids.
 type Credentials struct {
@@ -33,11 +33,14 @@ func initAuth() {
         ClientID:     cred.Cid,
         ClientSecret: cred.Csecret,
         // Update RedirectURL
-        RedirectURL:  "http://127.0.0.1/auth",
+        RedirectURL:  "http://localhost:3000/api/auth",
         Scopes: []string{
-            "https://www.googleapis.com/auth/userinfo.email",
+            "public_repo",
         },
-        Endpoint: google.Endpoint,
+        Endpoint: oauth2.Endpoint{
+            AuthURL:  "https://github.com/login/oauth/authorize",
+	        TokenURL: "https://github.com/login/oauth/access_token",
+        },
     }
 }
 

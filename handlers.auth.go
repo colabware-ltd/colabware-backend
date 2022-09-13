@@ -1,30 +1,26 @@
 package main
 
 import (
-	"fmt"
-	"log"
-	"io/ioutil"
-	"net/http"
-	"encoding/json"
 	"context"
-	"github.com/gin-gonic/gin"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+
 	"github.com/gin-contrib/sessions"
-	"golang.org/x/oauth2"
+	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-
+	"golang.org/x/oauth2"
 )
 
+var client *http.Client
+
 type User struct {
-	Sub           string `json:"sub"`
-	Name          string `json:"name"`
-	GivenName     string `json:"given_name"`
-	FamilyName    string `json:"family_name"`
-	Profile       string `json:"profile"`
-	Picture       string `json:"picture"`
-	Email         string `json:"email"`
-	EmailVerified bool   `json:"email_verified"`
-	WalletAddress string `json:"wallet_address"`
+	Login              string               `json:"login"`
+	Avatar             string               `json:"avatar_url"`
+	WalletAddress      string               `json:"wallet_address"`
 	ProjectsMaintained []primitive.ObjectID `json:"projects_maintained"`
 }
 
@@ -41,7 +37,7 @@ func (con Connection) getUser(c *gin.Context) {
 	session := sessions.Default(c)
 	userId := session.Get("user-id")
 	log.Printf(fmt.Sprint(userId))
-	filterCursor, err := con.Users.Find(context.TODO(), bson.M{"email": userId})
+	filterCursor, err := con.Users.Find(context.TODO(), bson.M{"login": userId})
 	if err != nil {
 		log.Printf("%v", err)
 		c.IndentedJSON(http.StatusInternalServerError, nil)
@@ -78,27 +74,26 @@ func (con Connection) authHandler(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
         return
 	}
-	client := conf.Client(oauth2.NoContext, tok)
+	client = conf.Client(oauth2.NoContext, tok)
 
 	// Ger information about the user
-	userinfo, err := client.Get("https://www.googleapis.com/oauth2/v3/userinfo")
+	userInfo, err := client.Get("https://api.github.com/user")
     if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
         return
 	}
-    defer userinfo.Body.Close()
-    data, _ := ioutil.ReadAll(userinfo.Body)
+    defer userInfo.Body.Close()
+    data, _ := ioutil.ReadAll(userInfo.Body)
 
-	// Marshal user info response from Google
+	// Marshal user info response
 	u := User{}
 	if err = json.Unmarshal(data, &u); err != nil {
 		log.Println(err)
 		c.HTML(http.StatusBadRequest, "error.tmpl", gin.H{"message": "Error marshalling response. Please try agian."})
 		return
 	}
-
-	// Set email as id for current session
-	session.Set("user-id", u.Email)
+	// Set login as id for current session
+	session.Set("user-id", u.Login)
 	err = session.Save()
 	if err != nil {
 		log.Println(err)
@@ -107,7 +102,7 @@ func (con Connection) authHandler(c *gin.Context) {
 	}
 
 	// Find user in db
-	filterCursor, err := con.Users.Find(context.TODO(), bson.M{"email": u.Email})
+	filterCursor, err := con.Users.Find(context.TODO(), bson.M{"login": u.Login})
 	if err != nil {
 		log.Printf("%v", err)
 		c.IndentedJSON(http.StatusInternalServerError, nil)

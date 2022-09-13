@@ -21,7 +21,7 @@ import (
 // be able to access this wallet. Wallet should hold maintainer tokens.
 type Project struct {
 	Name           string               `json:"name"`
-	Repository     string               `json:"repository"`
+	GitHub         GitHub               `json:"github"`
 	Description    string               `json:"description"`
 	Categories     []string             `json:"categories"`
 	Maintainers    []primitive.ObjectID `json:"maintainers"`
@@ -40,6 +40,11 @@ type Token struct {
 	MaintainerSupply int64   `json:"maintainerSupply"`
 }
 
+type GitHub struct {
+	RepoOwner string `json:"repoOwner"`
+	RepoName  string `json:"repoName"`
+}
+
 func (con Connection) postProject(c *gin.Context) {
 	var p Project
 	if err := c.BindJSON(&p); err != nil {
@@ -52,7 +57,7 @@ func (con Connection) postProject(c *gin.Context) {
 	var user struct {
 		ID primitive.ObjectID `bson:"_id, omitempty"`
 	}
-	e := con.Users.FindOne(context.TODO(), bson.M{"email": userId}).Decode(&user)
+	e := con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
 	if e != nil { 
 		log.Printf("%v", e)
 		return

@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -42,8 +45,13 @@ type Response struct {
 	Description string             `json:"description"`
 }
 
+type Issue struct {
+	Title string `json:"title"`
+	Body string `json:"body"`
+}
+
 func (con Connection) postRequest(c *gin.Context) {
-	id := c.Param("id")
+	projectId, err := primitive.ObjectIDFromHex(c.Param("id"))
 	var r Request
 	if err := c.BindJSON(&r); err != nil {
 		log.Printf("%v", err)
@@ -54,7 +62,7 @@ func (con Connection) postRequest(c *gin.Context) {
 	var user struct {
 		ID primitive.ObjectID `bson:"_id, omitempty"`
 	}
-	err := con.Users.FindOne(context.TODO(), bson.M{"email": userId}).Decode(&user)
+	err = con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
 	if err != nil { 
 		log.Printf("%v", err)
 		return
@@ -62,7 +70,7 @@ func (con Connection) postRequest(c *gin.Context) {
 	r.Creator = user.ID
 	r.BountyContributions[0].Creator = user.ID
 
-	r.Project, err = primitive.ObjectIDFromHex(id)
+	r.Project = projectId
 	if err != nil {
 		log.Printf("%v", err)
 		return
@@ -73,13 +81,41 @@ func (con Connection) postRequest(c *gin.Context) {
 		return
 	}
 
-	selector := bson.M{"_id": id}
+	selector := bson.M{"_id": projectId}
 	update := bson.M{
 		"$push": bson.M{"requests": result.InsertedID},
 	}
 	_, err = con.Projects.UpdateOne(context.TODO(), selector, update)
 
 	// TODO: Create issue with GitHub API
+	var project Project
+	err = con.Projects.FindOne(context.TODO(), selector).Decode(&project)
+
+
+	f := Issue{
+		Title:  r.Name,
+		Body: r.Description,
+	}
+	data, err := json.Marshal(f)
+	if err != nil {
+		log.Fatal(err)
+	}
+	reader := bytes.NewReader(data)
+
+	res, err := client.Post("https://api.github.com/repos/" + project.GitHub.RepoOwner + "/" + project.GitHub.RepoName + "/issues", "application/vnd.github+json", reader)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+	fmt.Println(res)
+	
+	res, err = client.Get("https://api.github.com/user")
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+	fmt.Println(res)
+
 
 	c.IndentedJSON(http.StatusCreated, r)
 }
