@@ -29,10 +29,12 @@ func initializeRoutes(c Connection) {
 	{
 		authorized.POST("/project", c.postProject)
 		authorized.POST("/project/:id/request", c.postRequest)
+		authorized.GET("/project/:name/request/:id/bounty", c.postBounty)
 		// authorized.POST("/project/:project/request/:request/vote", c.postRequestVote)
 		// authorized.POST("/project/:project/request/:request/response", c.postRequestResponse)
 		authorized.GET("/logout", c.logout)
 		authorized.GET("/", c.getUser)
+		authorized.POST("/payment-intent", createPaymentIntent)
 	}
 	router.GET("/api", hello)
 	router.GET("/api/project/:name", c.getProject)
