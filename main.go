@@ -8,6 +8,7 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
+	"github.com/stripe/stripe-go/v72"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -66,6 +67,8 @@ func main() {
 		Users:    client.Database("colabware").Collection("users"),
 		Wallets:  client.Database("colabware").Collection("wallets"),
 	}
+
+	stripe.Key = "sk_test_51J2rxbB2yNlUi1mdGCb18x2T4nsHHkfJ17iKhrmPWlw5Rpc9Fa6pWJR5iUWovE40Q6rajMQoImpapo3EF88iGeVL003oXMIDji"
 
 	// Initialize Google auth
 	initAuth()
