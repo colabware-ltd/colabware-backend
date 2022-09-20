@@ -34,7 +34,7 @@ func initializeRoutes(c Connection) {
 		// authorized.POST("/project/:project/request/:request/response", c.postRequestResponse)
 		authorized.GET("/logout", c.logout)
 		authorized.GET("/", c.getUser)
-		authorized.POST("/payment-intent", createPaymentIntent)
+		authorized.POST("/payment-intent", c.createPaymentIntent)
 	}
 	router.GET("/api", hello)
 	router.GET("/api/project/:name", c.getProject)
