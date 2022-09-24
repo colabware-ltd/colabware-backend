@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -15,11 +18,12 @@ import (
 )
 
 type Request struct {
+	Created             primitive.DateTime   `json:"created"`    
 	Creator             primitive.ObjectID   `json:"creator"`
 	Project             primitive.ObjectID   `json:"project"`
 	Name                string               `json:"name"`
 	Description         string               `json:"description"`
-	Type                string               `json:"type"`
+	Categories          []string              `json:"categories"`
 	Bounty              float32              `json:"bounty"`
 	BountyContributions []BountyContribution `json:"bountyContributions"`
 	Votes               []Vote               `json:"votes"`
@@ -68,10 +72,8 @@ func (con Connection) postRequest(c *gin.Context) {
 	}
 	r.Creator = user.ID
 	r.Project = projectId
-	if err != nil {
-		log.Printf("%v", err)
-		return
-	}
+	r.Created = primitive.NewDateTimeFromTime(time.Now())
+
 	result, err := con.Requests.InsertOne(context.TODO(), r)
 	if err != nil {
 		log.Printf("%v", err)
@@ -89,21 +91,33 @@ func (con Connection) postRequest(c *gin.Context) {
 	}
 
 	// TODO: Create issue with GitHub API
-	// var project Project
-	// err = con.Projects.FindOne(context.TODO(), selector).Decode(&project)
+	var project Project
+	options := options.FindOne()
+	options.SetProjection(bson.M{"github": 1})
+	err = con.Projects.FindOne(context.TODO(), selector, options).Decode(&project)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(project.GitHub.RepoName)
+	log.Println(project.GitHub.RepoOwner)
 
-	// f := Issue{
-	// 	Title:  r.Name,
-	// 	Body: "**[" + r.Type + "]** " + r.Description + "\n___\n**This request was created with Colabware.** For more information on claiming or contributing to the funds allocated for its development, view the original request [here]().",
-	// }
-	// data, err := json.Marshal(f)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// reader := bytes.NewReader(data)
+	f := Issue{
+		Title:  r.Name,
+		Body: "**[" + r.Categories[0] + "]** " + r.Description + "\n___\n**This request was created with Colabware.** For more information on claiming or contributing to the funds allocated for its development, view the original request [here]().",
+	}
+	data, err := json.Marshal(f)
+	if err != nil {
+		log.Fatal(err)
+	}
+	reader := bytes.NewReader(data)
+	log.Println(reader)
 
-	// res, err := client.Post("https://api.github.com/repos/colabware-ltd/test-project/issues", "application/vnd.github+json", reader)
-	// res, err := client.Post("https://api.github.com/repos/" + project.GitHub.RepoOwner + "/" + project.GitHub.RepoName + "/issues", "application/vnd.github+json", reader)
+	res, err := client.Post("https://api.github.com/repos/" + project.GitHub.RepoOwner + "/" + project.GitHub.RepoName + "/issues", "application/vnd.github+json", reader)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+    defer res.Body.Close()
 
 	c.IndentedJSON(http.StatusCreated, gin.H{"_id": result.InsertedID})
 }
@@ -126,7 +140,7 @@ func (con Connection) listRequests(c *gin.Context) {
 	}
 	selector := bson.M{"project": id}
 	options := options.Find()
-	options.SetProjection(bson.M{"name": 1, "type": 1, "description": 1, "bounty": 1, "_id": 0})
+	// options.SetProjection(bson.M{"name": 1, "categories": 1, "description": 1, "bounty": 1, "created": 1, "_id": 0})
 	options.SetLimit(limitInt)
 	options.SetSkip(limitInt * (pageInt - 1))
 
