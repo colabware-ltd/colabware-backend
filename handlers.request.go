@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -15,31 +18,38 @@ import (
 )
 
 type Request struct {
-	Creator             primitive.ObjectID   `json:"creator"`
+	Created             primitive.DateTime   `json:"created"`    
+	CreatorId           primitive.ObjectID   `json:"creatorId"`
+	CreatorName         string               `json:"creatorName"`
 	Project             primitive.ObjectID   `json:"project"`
 	Name                string               `json:"name"`
 	Description         string               `json:"description"`
-	Type                string               `json:"type"`
+	Expiry              string               `json:"expiry"`
+	Categories          []string             `json:"categories"`
 	Bounty              float32              `json:"bounty"`
 	BountyContributions []BountyContribution `json:"bountyContributions"`
 	Votes               []Vote               `json:"votes"`
 	Responses           []Response           `json:"responses"`
+	GithubIssue         uint64               `json:"githubIssue"`
 }
 
 // TODO: Add expiry to bounty
 type BountyContribution struct {
-	Creator         primitive.ObjectID `json:"creator"`
-	AmountReceived  float32            `json:"amountReceived"`
-	PaymentIntent   string             `json:"paymentIntent"`
+	CreatorId      primitive.ObjectID `json:"creatorId"`
+	CreatorName    string             `json:"creatorName"`
+	AmountReceived float32            `json:"amountReceived"`
+	PaymentIntent  string             `json:"paymentIntent"`
 }
 
 type Vote struct {
-	Creator    primitive.ObjectID `json:"creator"`
-	TokensHeld int64              `json:"tokens"`
+	CreatorId   primitive.ObjectID `json:"creatorId"`
+	CreatorName string             `json:"creatorName"`
+	TokensHeld  int64              `json:"tokens"`
 }
 
 type Response struct {
-	Creator     primitive.ObjectID `json:"creator"`
+	CreatorId   primitive.ObjectID `json:"creatorId"`
+	CreatorName string             `json:"creatorName"`
 	URL         string             `json:"url"`
 	Description string             `json:"description"`
 }
@@ -49,6 +59,7 @@ type Issue struct {
 	Body string `json:"body"`
 }
 
+// TODO: Add request expiry date
 func (con Connection) postRequest(c *gin.Context) {
 	projectId, err := primitive.ObjectIDFromHex(c.Param("id"))
 	var r Request
@@ -59,51 +70,71 @@ func (con Connection) postRequest(c *gin.Context) {
 
 	userId := sessions.Default(c).Get("user-id")
 	var user struct {
-		ID primitive.ObjectID `bson:"_id, omitempty"`
+		ID    primitive.ObjectID `bson:"_id, omitempty"`
+		Login string             `bson:"login"`
 	}
 	err = con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
+	log.Println(user.Login)
 	if err != nil { 
 		log.Printf("%v", err)
 		return
 	}
-	r.Creator = user.ID
+	r.CreatorId = user.ID
+	r.CreatorName = user.Login
 	r.Project = projectId
+	r.Created = primitive.NewDateTimeFromTime(time.Now())
+
+	// TODO: Create issue with GitHub API
+	var project Project
+	projectSelector := bson.M{"_id": projectId}
+	options := options.FindOne()
+	options.SetProjection(bson.M{"github": 1})
+	err = con.Projects.FindOne(context.TODO(), projectSelector, options).Decode(&project)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(project.GitHub.RepoName)
+	log.Println(project.GitHub.RepoOwner)
+
+	f := Issue{
+		Title:  r.Name,
+		Body: "**[" + r.Categories[0] + "]** " + r.Description + "\n___\n**This request was created with Colabware.** For more information on claiming or contributing to the funds allocated for its development, view the original request [here]().",
+	}
+	data, err := json.Marshal(f)
+	if err != nil {
+		log.Fatal(err)
+	}
+	reader := bytes.NewReader(data)
+	log.Println(reader)
+	
+	var resTarget struct {
+		Number uint64 `bson:"number"`
+	}
+	res, err := client.Post("https://api.github.com/repos/" + project.GitHub.RepoOwner + "/" + project.GitHub.RepoName + "/issues", "application/vnd.github+json", reader)
 	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
+    defer res.Body.Close()
+	err = json.NewDecoder(res.Body).Decode(&resTarget)
+
+	r.GithubIssue = resTarget.Number
+	log.Println(resTarget.Number)
+
 	result, err := con.Requests.InsertOne(context.TODO(), r)
 	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
 
-	selector := bson.M{"_id": projectId}
-	update := bson.M{
+	projectUpdate := bson.M{
 		"$push": bson.M{"requests": result.InsertedID},
 	}
-	_, err = con.Projects.UpdateOne(context.TODO(), selector, update)
+	_, err = con.Projects.UpdateOne(context.TODO(), projectSelector, projectUpdate)
 	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
-
-	// TODO: Create issue with GitHub API
-	// var project Project
-	// err = con.Projects.FindOne(context.TODO(), selector).Decode(&project)
-
-	// f := Issue{
-	// 	Title:  r.Name,
-	// 	Body: "**[" + r.Type + "]** " + r.Description + "\n___\n**This request was created with Colabware.** For more information on claiming or contributing to the funds allocated for its development, view the original request [here]().",
-	// }
-	// data, err := json.Marshal(f)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// reader := bytes.NewReader(data)
-
-	// res, err := client.Post("https://api.github.com/repos/colabware-ltd/test-project/issues", "application/vnd.github+json", reader)
-	// res, err := client.Post("https://api.github.com/repos/" + project.GitHub.RepoOwner + "/" + project.GitHub.RepoName + "/issues", "application/vnd.github+json", reader)
 
 	c.IndentedJSON(http.StatusCreated, gin.H{"_id": result.InsertedID})
 }
@@ -126,7 +157,7 @@ func (con Connection) listRequests(c *gin.Context) {
 	}
 	selector := bson.M{"project": id}
 	options := options.Find()
-	options.SetProjection(bson.M{"name": 1, "type": 1, "description": 1, "bounty": 1, "_id": 0})
+	// options.SetProjection(bson.M{"name": 1, "categories": 1, "description": 1, "bounty": 1, "created": 1, "_id": 0})
 	options.SetLimit(limitInt)
 	options.SetSkip(limitInt * (pageInt - 1))
 
@@ -162,14 +193,17 @@ func (con Connection) postBounty(c *gin.Context) {
 	
 	userId := sessions.Default(c).Get("user-id")
 	var user struct {
-		ID primitive.ObjectID `bson:"_id, omitempty"`
+		ID    primitive.ObjectID `bson:"_id, omitempty"`
+		Login string             `bson:"login, omitempty"`
+
 	}
 	err := con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
 	if err != nil { 
 		log.Printf("%v", err)
 		return
 	}
-	b.Creator = user.ID
+	b.CreatorId = user.ID
+	b.CreatorName = user.Login
 	b.AmountReceived = float32(pi.AmountReceived)/100
 	b.PaymentIntent = paymentIntent
 
