@@ -22,28 +22,29 @@ func authorizeRequest() gin.HandlerFunc {
 	}
 }
 
-func initializeRoutes(c Connection) {
+func initializeRoutes(db Connection) {
 	// Handle the index route
 	authorized := router.Group("/api/user")
 	authorized.Use(authorizeRequest())
 	{
-		authorized.POST("/project", c.postProject)
-		authorized.POST("/project/:id/request", c.postRequest)
-		authorized.GET("/project/:name/request/:id/bounty", c.postBounty)
+		authorized.POST("/project", db.postProject)
+		authorized.POST("/project/:id/request", db.postRequest)
+		authorized.GET("/project/:name/request/:id/bounty", db.postBounty)
+		authorized.GET("/project/branches/:owner/:repo", getProjectBranches)
+		authorized.POST("/request/:request/response", db.postRequestResponse)
 		// authorized.POST("/project/:project/request/:request/vote", c.postRequestVote)
-		// authorized.POST("/project/:project/request/:request/response", c.postRequestResponse)
-		authorized.GET("/logout", c.logout)
-		authorized.GET("/", c.getUser)
-		authorized.POST("/payment-intent", c.createPaymentIntent)
+		authorized.GET("/logout", db.logout)
+		authorized.GET("/", db.getUser)
+		authorized.POST("/payment-intent", db.createPaymentIntent)
 	}
 	router.GET("/api", hello)
-	router.GET("/api/project/:name", c.getProject)
-	router.GET("/api/project/list", c.listProjects)
-	router.GET("/api/project/:name/request/list", c.listRequests)
-	router.GET("/api/project/:name/balance/:wallet", c.getBalance)
-	router.GET("/api/project/:name/balances", c.getProjectBalances)	
-	router.POST("/api/createwallet", c.postWallet)
+	router.GET("/api/project/:name", db.getProject)
+	router.GET("/api/project/list", db.listProjects)
+	router.GET("/api/project/:name/request/list", db.listRequests)
+	router.GET("/api/project/:name/balance/:wallet", db.getBalance)
+	router.GET("/api/project/:name/balances", db.getProjectBalances)	
+	router.POST("/api/createwallet", db.postWallet)
 	// router.POST("/api/transfer", c.transfer)
 	router.GET("/api/login", loginHandler)
-	router.GET("/api/auth", c.authHandler)
+	router.GET("/api/auth", db.authHandler)
 }

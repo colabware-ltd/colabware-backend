@@ -9,9 +9,9 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-func FetchProject(address common.Address) (*big.Int, error) {
+func FetchProject(address common.Address, ethNode string) (*big.Int, error) {
 	// connect to an ethereum node hosted by infura
-	blockchain, err := ethclient.Dial("https://rinkeby.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	blockchain, err := ethclient.Dial(ethNode)
 
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)

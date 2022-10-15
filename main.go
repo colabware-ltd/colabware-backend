@@ -16,6 +16,7 @@ import (
 
 var router *gin.Engine
 var store = cookie.NewStore([]byte("secret"))
+var config Config
 
 type Connection struct {
 	Projects *mongo.Collection
@@ -24,13 +25,13 @@ type Connection struct {
 	Wallets  *mongo.Collection
 }
 
-func initDB(dbUser, dbPass, dbAddr string) *mongo.Client {
+func initDB() *mongo.Client {
 	// Connect to the database
 	credential := options.Credential{
-		Username: "colabware",
-		Password: "zfbj3c7oEFgsuSrTx6",
+		Username: config.DBUser,
+		Password: config.DBPass,
 	}
-	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017").SetAuth(credential))
+	client, err := mongo.NewClient(options.Client().ApplyURI(config.DBAddr).SetAuth(credential))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -48,10 +49,12 @@ func initDB(dbUser, dbPass, dbAddr string) *mongo.Client {
 }
 
 func main() {
-	config, err := LoadConfig(".")
+	var err error
+	config, err = LoadConfig(".")
 	if err != nil {
 		log.Fatal("cannot load config:", err)
 	}
+
 	// Set Gin to production mode
 	gin.SetMode(gin.ReleaseMode)
 
@@ -59,22 +62,24 @@ func main() {
 	router = gin.Default()
 	router.Use(sessions.Sessions("colabware-auth", store))
 
-	client := initDB(config.DBUser, config.DBPass, config.DBAddr)
-	defer client.Disconnect(context.Background())
-	conn := Connection{
-		Projects: client.Database("colabware").Collection("projects"),
-		Requests: client.Database("colabware").Collection("requests"),
-		Users:    client.Database("colabware").Collection("users"),
-		Wallets:  client.Database("colabware").Collection("wallets"),
+	// Initialise DB
+	dbClient := initDB()
+	defer dbClient.Disconnect(context.Background())
+	dbConn := Connection{
+		Projects: dbClient.Database("colabware").Collection("projects"),
+		Requests: dbClient.Database("colabware").Collection("requests"),
+		Users:    dbClient.Database("colabware").Collection("users"),
+		Wallets:  dbClient.Database("colabware").Collection("wallets"),
 	}
 
-	stripe.Key = "sk_test_51J2rxbB2yNlUi1mdGCb18x2T4nsHHkfJ17iKhrmPWlw5Rpc9Fa6pWJR5iUWovE40Q6rajMQoImpapo3EF88iGeVL003oXMIDji"
+	// Set API key for Stripe
+	stripe.Key = config.StripeKey
 
-	// Initialize Google auth
+	// Initialize GitHub auth
 	initAuth()
 
 	// Initialize the routes
-	initializeRoutes(conn)
+	initializeRoutes(dbConn)
 
 	// Start serving the application
 	err = router.Run("localhost:9998")
