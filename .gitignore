@@ -2,3 +2,4 @@ colabware-backend
 mongodb/database
 log
 dev.env
+.DS_Store

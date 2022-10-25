@@ -210,7 +210,7 @@ func (con Connection) getWallet(owner primitive.ObjectID) *Wallet {
 }
 
 func (con Connection) getBalance(c *gin.Context) {
-	project := c.Param("name")
+	project := c.Param("project")
 	wallet := c.Param("wallet")
 	c.IndentedJSON(http.StatusFound, readBalance(project, wallet))
 }

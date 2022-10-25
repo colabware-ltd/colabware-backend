@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
@@ -20,13 +21,14 @@ import (
 // TODO: Create wallet for project upon creation. Maintainers should then
 // be able to access this wallet. Wallet should hold maintainer tokens.
 type Project struct {
+	ID             primitive.ObjectID   `json:"_id,omitempty" bson:"_id,omitempty"`
 	Name           string               `json:"name"`
 	GitHub         GitHub               `json:"github"`
 	Description    string               `json:"description"`
 	Categories     []string             `json:"categories"`
 	Maintainers    []primitive.ObjectID `json:"maintainers"`
 	Token          Token                `json:"token"`
-	ProjectAddress common.Address       `json:"projectAddress"`
+	ProjectAddress string               `json:"projectAddress"`
 	ProjectWallet  primitive.ObjectID   `json:"wallet"`
 	Requests       []primitive.ObjectID `json:"requests"`
 	Roadmap        []primitive.ObjectID `json:"roadmap"`
@@ -41,8 +43,17 @@ type Token struct {
 }
 
 type GitHub struct {
-	RepoOwner string `json:"repoOwner"`
-	RepoName  string `json:"repoName"`
+	RepoOwner  string       `json:"repoOwner"`
+	RepoName   string       `json:"repoName"`
+	Forks      []GitHubFork `json:"forks"`    
+}
+
+type GitHubFork struct {
+	FullName string `json:"full_name,omitempty" bson:"full_name,omitempty"`
+}
+
+type GitHubBranch struct {
+	Name string `json:"name,omitempty" bson:"name,omitempty"`
 }
 
 func (con Connection) postProject(c *gin.Context) {
@@ -80,7 +91,7 @@ func (con Connection) postProject(c *gin.Context) {
 	walletId, wallet := con.createWallet(result.InsertedID.(primitive.ObjectID))
 
 	// Deploy contract and store address; wait for execution to complete
-	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, p.Token.TotalSupply, p.Token.MaintainerSupply, wallet.Address)
+	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, p.Token.TotalSupply, p.Token.MaintainerSupply, wallet.Address, config.EthNode, config.EthKey)
 	log.Printf("Contract pending deploy: 0x%x\n", projectAddress)
 
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
@@ -100,22 +111,61 @@ func (con Connection) postProject(c *gin.Context) {
 }
 
 func (con Connection) getProject(c *gin.Context) {
-	name := c.Param("name")
-	var project bson.M
+	name := c.Param("project")
+	var project Project
 	selector := bson.M{"name": name}
 	err := con.Projects.FindOne(context.TODO(), selector).Decode(&project)
 	if err != nil {
 		log.Printf("%v", err)
 		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
-	}	
+	}
+	
+	// If user is authenticated, get forks from GitHub API
+	if sessions.Default(c).Get("user-id") != nil {
+		var resTarget []GitHubFork
+		res, err := client.Get("https://api.github.com/repos/" + project.GitHub.RepoOwner + "/" + project.GitHub.RepoName + "/forks")
+		if err != nil {
+			log.Printf("%v", err)
+			return
+		}
+		defer res.Body.Close()
+		err = json.NewDecoder(res.Body).Decode(&resTarget)
+		if err != nil {
+			log.Printf("%v", err)
+			return
+		}
+		project.GitHub.Forks = resTarget
+	}
+
 	c.IndentedJSON(http.StatusFound, project)	
 }
 
-func (con Connection) getProjectBalances(c *gin.Context) {
-	project := c.Param("name")
+func getProjectBranches(c *gin.Context) {
+	owner := c.Param("owner")
+	repo := c.Param("repo")
 
-	client, err := ethclient.Dial("https://rinkeby.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	var resTarget []struct {
+		Name string `json:"name,omitempty" bson:"name,omitempty"`
+	}
+	res, err := client.Get("https://api.github.com/repos/" + owner + "/" + repo + "/branches")
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+	defer res.Body.Close()
+	err = json.NewDecoder(res.Body).Decode(&resTarget)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+	c.IndentedJSON(http.StatusFound, resTarget)
+}
+
+func (con Connection) getProjectBalances(c *gin.Context) {
+	project := c.Param("project")
+
+	client, err := ethclient.Dial(config.EthNode)
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 		return
@@ -137,7 +187,7 @@ func (con Connection) getProjectBalances(c *gin.Context) {
 	})
 }
 
-func (con Connection) listProjects(c *gin.Context) {
+func (con Connection) getProjects(c *gin.Context) {
 	page := c.DefaultQuery("page", "1")
 	limit := c.DefaultQuery("limit", "10")
 	limitInt, err := strconv.ParseInt(limit, 10, 64)

@@ -19,10 +19,12 @@ var store = cookie.NewStore([]byte("secret"))
 var config Config
 
 type Connection struct {
-	Projects *mongo.Collection
-	Requests *mongo.Collection
-	Users    *mongo.Collection
-	Wallets  *mongo.Collection
+	Projects      *mongo.Collection
+	Requests      *mongo.Collection
+	Contributions *mongo.Collection
+	Proposals     *mongo.Collection
+	Users         *mongo.Collection
+	Wallets       *mongo.Collection
 }
 
 func initDB() *mongo.Client {
@@ -66,10 +68,12 @@ func main() {
 	dbClient := initDB()
 	defer dbClient.Disconnect(context.Background())
 	dbConn := Connection{
-		Projects: dbClient.Database("colabware").Collection("projects"),
-		Requests: dbClient.Database("colabware").Collection("requests"),
-		Users:    dbClient.Database("colabware").Collection("users"),
-		Wallets:  dbClient.Database("colabware").Collection("wallets"),
+		Projects:      dbClient.Database("colabware").Collection("projects"),
+		Requests:      dbClient.Database("colabware").Collection("requests"),
+		Contributions: dbClient.Database("colabware").Collection("contributions"),
+		Proposals:     dbClient.Database("colabware").Collection("proposals"),
+		Users:         dbClient.Database("colabware").Collection("users"),
+		Wallets:       dbClient.Database("colabware").Collection("wallets"),
 	}
 
 	// Set API key for Stripe
