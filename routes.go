@@ -36,6 +36,8 @@ func initializeRoutes(db Connection) {
 		// authorized.POST("/project/:project/request/:request/vote", c.postRequestVote)
 		authorized.GET("/logout", db.logout)
 		authorized.GET("/", db.getUser)
+		authorized.GET("/stripe", db.stripeAccountLink)
+		authorized.GET("/stripe/verify", db.stripeVerify)
 		authorized.POST("/payment-intent", db.createPaymentIntent)
 	}
 	router.GET("/api/project/:project", db.getProject)
