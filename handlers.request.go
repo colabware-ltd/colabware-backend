@@ -11,6 +11,9 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/procyon-projects/chrono"
+	"github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/refund"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -30,8 +33,8 @@ type Request struct {
 	ProjectVotes      []ProjectVote        `json:"project_votes" bson:"project_votes,omitempty"`
 	Proposals         []primitive.ObjectID `json:"proposals" bson:"proposals,omitempty"`
 	GithubIssue       uint64               `json:"github_issue" bson:"github_issue,omitempty"`
-	GitHubFork        GitHubFork           `json:"github_fork" bson:"github_fork,omitempty"`
-	GitHubBranch      GitHubBranch         `json:"github_branch" bson:"github_branch,omitempty"`
+	// GitHubFork        GitHubFork           `json:"github_fork" bson:"github_fork,omitempty"`
+	// GitHubBranch      GitHubBranch         `json:"github_branch" bson:"github_branch,omitempty"`
 	Status            string               `json:"status" bson:"status,omitempty"`
 }
 
@@ -73,14 +76,11 @@ func (con Connection) postRequest(c *gin.Context) {
 	// TODO: Create issue with GitHub API
 	var project Project
 	projectSelector := bson.M{"_id": projectId}
-	options := options.FindOne()
-	options.SetProjection(bson.M{"github": 1})
+	options := options.FindOne().SetProjection(bson.M{"github": 1})
 	err = con.Projects.FindOne(context.TODO(), projectSelector, options).Decode(&project)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println(project.GitHub.RepoName)
-	log.Println(project.GitHub.RepoOwner)
 
 	f := Issue{
 		Title:  r.Name,
@@ -123,6 +123,72 @@ func (con Connection) postRequest(c *gin.Context) {
 	}
 
 	c.IndentedJSON(http.StatusCreated, gin.H{"_id": result.InsertedID})
+	con.handleExpiry(r, result.InsertedID.(primitive.ObjectID))
+}
+
+func (con Connection) handleExpiry(request Request, requestId primitive.ObjectID) {
+	// Handle actions on expiry
+	taskScheduler := chrono.NewDefaultTaskScheduler()
+	
+	now := time.Now()
+	startTime := now.Add(time.Minute * 5)
+
+	layout := "2006-01-02T15:04:05.000Z"
+	t, err := time.Parse(layout, request.Expiry)
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println(t)
+
+	// TODO: Replace time with expiry
+	_, err = taskScheduler.Schedule(func(ctx context.Context) {
+		
+		// If no proposals submitted, refund contributors
+		if len(request.Proposals) == 0 || request.Proposals == nil {
+			
+			// Find all contributions for request to refund
+			filterCursor, err := con.Contributions.Find(context.TODO(), bson.M{ "request_id": requestId })
+			if err != nil {
+				log.Printf("%v", err)
+				return
+			}
+			var contributionsFiltered []Contribution
+			err = filterCursor.All(context.TODO(), &contributionsFiltered)
+			if err != nil {
+				log.Printf("%v", err)
+				return
+			}
+			
+			// TODO: Add transaction collection in DB
+			for _, contribution := range contributionsFiltered {
+				for _, transaction := range contribution.Transactions {
+					params := &stripe.RefundParams{
+						PaymentIntent: &transaction,
+					}
+					_, err := refund.New(params)
+					if err != nil {
+						log.Printf("%v", err)
+						return
+					}
+				}
+			}
+		}
+		requestUpdate := bson.M{
+			"$set": bson.M{
+				"status": "expired",
+			},
+		}
+		_, err = con.Requests.UpdateOne(context.TODO(), bson.M{"_id": requestId}, requestUpdate)
+		if err != nil {
+			log.Printf("%v", err)
+			return
+		}
+		
+	}, chrono.WithTime(startTime))
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
 }
 
 func (con Connection) getRequests(c *gin.Context) {

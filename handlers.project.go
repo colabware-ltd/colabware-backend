@@ -52,9 +52,9 @@ type GitHubFork struct {
 	FullName string `json:"full_name,omitempty" bson:"full_name,omitempty"`
 }
 
-type GitHubBranch struct {
-	Name string `json:"name,omitempty" bson:"name,omitempty"`
-}
+// type GitHubBranch struct {
+// 	Name string `json:"name,omitempty" bson:"name,omitempty"`
+// }
 
 func (con Connection) postProject(c *gin.Context) {
 	var p Project
