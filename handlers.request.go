@@ -128,18 +128,12 @@ func (con Connection) postRequest(c *gin.Context) {
 func (con Connection) handleExpiry(expiry string, requestId primitive.ObjectID) {
 	// Handle actions on expiry
 	taskScheduler := chrono.NewDefaultTaskScheduler()
-	
-	now := time.Now()
-	startTime := now.Add(time.Minute * 5)
-
 	layout := "2006-01-02T15:04:05.000Z"
 	t, err := time.Parse(layout, expiry)
 	if err != nil {
 		log.Println(err)
 	}
-	log.Println(t)
 
-	// TODO: Replace time with expiry
 	_, err = taskScheduler.Schedule(func(ctx context.Context) {
 		var request Request
 		var requestUpdate bson.M
@@ -194,7 +188,7 @@ func (con Connection) handleExpiry(expiry string, requestId primitive.ObjectID) 
 				return
 			}
 		}
-	}, chrono.WithTime(startTime))
+	}, chrono.WithTime(t))
 	if err != nil {
 		log.Printf("%v", err)
 		return
