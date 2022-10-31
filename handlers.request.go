@@ -20,21 +20,20 @@ import (
 )
 
 type Request struct {
-	Created           primitive.DateTime   `json:"created" bson:"created,omitempty"`    
-	CreatorId         primitive.ObjectID   `json:"creator_id" bson:"creator_id,omitempty"`
-	CreatorName       string               `json:"creator_name" bson:"creator_name,omitempty"`
-	Project           primitive.ObjectID   `json:"project" bson:"project,omitempty"`
-	Name              string               `json:"name" bson:"name,omitempty"`
-	Description       string               `json:"description" bson:"description,omitempty"`
-	Expiry            string               `json:"expiry" bson:"expiry,omitempty"`
-	Categories        []string             `json:"categories" bson:"categories,omitempty"`
-	ContributionTotal float32              `json:"contribution_total" bson:"contribution_total,omitempty"`
-	Contributions     []primitive.ObjectID `json:"contributions" bson:"contributions,omitempty"`
-	ProjectVotes      []ProjectVote        `json:"project_votes" bson:"project_votes,omitempty"`
-	Proposals         []primitive.ObjectID `json:"proposals" bson:"proposals,omitempty"`
-	GithubIssue       uint64               `json:"github_issue" bson:"github_issue,omitempty"`
-	// GitHubFork        GitHubFork           `json:"github_fork" bson:"github_fork,omitempty"`
-	// GitHubBranch      GitHubBranch         `json:"github_branch" bson:"github_branch,omitempty"`
+	Created            primitive.DateTime   `json:"created" bson:"created,omitempty"`    
+	CreatorId          primitive.ObjectID   `json:"creator_id" bson:"creator_id,omitempty"`
+	CreatorName        string               `json:"creator_name" bson:"creator_name,omitempty"`
+	Project            primitive.ObjectID   `json:"project" bson:"project,omitempty"`
+	Name               string               `json:"name" bson:"name,omitempty"`
+	Description        string               `json:"description" bson:"description,omitempty"`
+	Expiry             string               `json:"expiry" bson:"expiry,omitempty"`
+	Categories         []string             `json:"categories" bson:"categories,omitempty"`
+	Contributions      []primitive.ObjectID `json:"contributions" bson:"contributions,omitempty"`
+	ContributionTotal  float32              `json:"contribution_total" bson:"contribution_total,omitempty"`
+	ProjectVotes       []ProjectVote        `json:"project_votes" bson:"project_votes,omitempty"`
+	Proposals          []primitive.ObjectID `json:"proposals" bson:"proposals,omitempty"`
+	ProposalMerged     primitive.ObjectID   `json:"proposal_merged" bson:"proposal_merged,omitempty"`
+	GithubIssue        uint64               `json:"github_issue" bson:"github_issue,omitempty"`
 	Status            string               `json:"status" bson:"status,omitempty"`
 }
 
@@ -123,10 +122,10 @@ func (con Connection) postRequest(c *gin.Context) {
 	}
 
 	c.IndentedJSON(http.StatusCreated, gin.H{"_id": result.InsertedID})
-	con.handleExpiry(r, result.InsertedID.(primitive.ObjectID))
+	con.handleExpiry(r.Expiry, result.InsertedID.(primitive.ObjectID))
 }
 
-func (con Connection) handleExpiry(request Request, requestId primitive.ObjectID) {
+func (con Connection) handleExpiry(expiry string, requestId primitive.ObjectID) {
 	// Handle actions on expiry
 	taskScheduler := chrono.NewDefaultTaskScheduler()
 	
@@ -134,7 +133,7 @@ func (con Connection) handleExpiry(request Request, requestId primitive.ObjectID
 	startTime := now.Add(time.Minute * 5)
 
 	layout := "2006-01-02T15:04:05.000Z"
-	t, err := time.Parse(layout, request.Expiry)
+	t, err := time.Parse(layout, expiry)
 	if err != nil {
 		log.Println(err)
 	}
@@ -142,7 +141,19 @@ func (con Connection) handleExpiry(request Request, requestId primitive.ObjectID
 
 	// TODO: Replace time with expiry
 	_, err = taskScheduler.Schedule(func(ctx context.Context) {
-		
+		var request Request
+		var requestUpdate bson.M
+		requestSelector := bson.M{
+			"_id": requestId,
+		}
+
+		// Get request using request ID
+		err = con.Requests.FindOne(context.TODO(), requestSelector).Decode(&request)
+		if err != nil { 
+			log.Printf("%v", err)
+			return
+		}
+
 		// If no proposals submitted, refund contributors
 		if len(request.Proposals) == 0 || request.Proposals == nil {
 			
@@ -172,18 +183,17 @@ func (con Connection) handleExpiry(request Request, requestId primitive.ObjectID
 					}
 				}
 			}
+			requestUpdate = bson.M{
+				"$set": bson.M{
+					"status": "expired",
+				},
+			}
+			_, err = con.Requests.UpdateOne(context.TODO(), bson.M{"_id": requestId}, requestUpdate)
+			if err != nil {
+				log.Printf("%v", err)
+				return
+			}
 		}
-		requestUpdate := bson.M{
-			"$set": bson.M{
-				"status": "expired",
-			},
-		}
-		_, err = con.Requests.UpdateOne(context.TODO(), bson.M{"_id": requestId}, requestUpdate)
-		if err != nil {
-			log.Printf("%v", err)
-			return
-		}
-		
 	}, chrono.WithTime(startTime))
 	if err != nil {
 		log.Printf("%v", err)
