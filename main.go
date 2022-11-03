@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
-	"log"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -18,10 +19,11 @@ var router *gin.Engine
 var store = cookie.NewStore([]byte("secret"))
 
 type Connection struct {
-	Projects *mongo.Collection
-	Requests *mongo.Collection
-	Users    *mongo.Collection
-	Wallets  *mongo.Collection
+	Projects      *mongo.Collection
+	Requests      *mongo.Collection
+	Users         *mongo.Collection
+	Wallets       *mongo.Collection
+	TokenPayments *mongo.Collection
 }
 
 func initDB(dbUser, dbPass, dbAddr string) *mongo.Client {
@@ -48,6 +50,8 @@ func initDB(dbUser, dbPass, dbAddr string) *mongo.Client {
 }
 
 func main() {
+	log.SetReportCaller(true)
+
 	config, err := LoadConfig(".")
 	if err != nil {
 		log.Fatal("cannot load config:", err)
@@ -62,11 +66,16 @@ func main() {
 	client := initDB(config.DBUser, config.DBPass, config.DBAddr)
 	defer client.Disconnect(context.Background())
 	conn := Connection{
-		Projects: client.Database("colabware").Collection("projects"),
-		Requests: client.Database("colabware").Collection("requests"),
-		Users:    client.Database("colabware").Collection("users"),
-		Wallets:  client.Database("colabware").Collection("wallets"),
+		Projects:      client.Database("colabware").Collection("projects"),
+		Requests:      client.Database("colabware").Collection("requests"),
+		Users:         client.Database("colabware").Collection("users"),
+		Wallets:       client.Database("colabware").Collection("wallets"),
+		TokenPayments: client.Database("colabware").Collection("token_payments"),
 	}
+
+	// Start payment processors
+	//c := make(chan string)
+	go conn.tokenPaymentProcessor()
 
 	stripe.Key = "sk_test_51J2rxbB2yNlUi1mdGCb18x2T4nsHHkfJ17iKhrmPWlw5Rpc9Fa6pWJR5iUWovE40Q6rajMQoImpapo3EF88iGeVL003oXMIDji"
 

@@ -43,7 +43,7 @@ Generate contract bindings using `abigen --abi ./build/Project.abi --pkg contrac
 
 # How to run
 
-pkill -f colabware-backend; go build; ./colabware-backend >> log 2>&1 &
+pkill -f colabware-backend; go build; nohup ./colabware-backend >> log 2>&1 &
 
 # Etherscan link
 

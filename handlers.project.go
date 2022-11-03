@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
-	"log"
+	"math/big"
 	"net/http"
 	"strconv"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
 	"github.com/colabware-ltd/colabware-backend/utilities"
@@ -35,8 +37,8 @@ type Project struct {
 type Token struct {
 	Name             string  `json:"name"`
 	Symbol           string  `json:"symbol"`
-	Price            float32 `json:"price"`
-	TotalSupply      int64   `json:"totalSupply"`
+	Price            float32 `json:"price,string"`
+	TotalSupply      big.Int `json:"totalSupply"`
 	MaintainerSupply int64   `json:"maintainerSupply"`
 }
 
@@ -58,7 +60,7 @@ func (con Connection) postProject(c *gin.Context) {
 		ID primitive.ObjectID `bson:"_id, omitempty"`
 	}
 	e := con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
-	if e != nil { 
+	if e != nil {
 		log.Printf("%v", e)
 		return
 	}
@@ -86,7 +88,7 @@ func (con Connection) postProject(c *gin.Context) {
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
 	update = bson.M{
 		"$set": bson.M{
-			"projectwallet": walletId,
+			"projectwallet":  walletId,
 			"projectaddress": projectAddress.Hex(),
 		},
 	}
@@ -108,14 +110,14 @@ func (con Connection) getProject(c *gin.Context) {
 		log.Printf("%v", err)
 		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
-	}	
-	c.IndentedJSON(http.StatusFound, project)	
+	}
+	c.IndentedJSON(http.StatusFound, project)
 }
 
 func (con Connection) getProjectBalances(c *gin.Context) {
 	project := c.Param("name")
 
-	client, err := ethclient.Dial("https://rinkeby.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	client, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 		return
@@ -131,9 +133,9 @@ func (con Connection) getProjectBalances(c *gin.Context) {
 	maintainerBalance, maintainerReserved, investorBalance, _ := contract.ListBalances(nil)
 
 	c.IndentedJSON(http.StatusFound, gin.H{
-		"maintainerBalance": maintainerBalance, 
-		"maintainerReserved": maintainerReserved, 
-		"investorBalance": investorBalance,
+		"maintainerBalance":  maintainerBalance,
+		"maintainerReserved": maintainerReserved,
+		"investorBalance":    investorBalance,
 	})
 }
 
@@ -171,5 +173,5 @@ func (con Connection) listProjects(c *gin.Context) {
 		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
 	}
-	c.IndentedJSON(http.StatusFound, gin.H{"total": total, "results": projectsFiltered} )
+	c.IndentedJSON(http.StatusFound, gin.H{"total": total, "results": projectsFiltered})
 }

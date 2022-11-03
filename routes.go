@@ -1,8 +1,9 @@
 package main
 
 import (
-	"log"
 	"net/http"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -34,14 +35,14 @@ func initializeRoutes(c Connection) {
 		// authorized.POST("/project/:project/request/:request/response", c.postRequestResponse)
 		authorized.GET("/logout", c.logout)
 		authorized.GET("/", c.getUser)
-		authorized.POST("/payment-intent", c.createPaymentIntent)
+		authorized.POST("/token-payment", c.createTokenPayment)
 	}
 	router.GET("/api", hello)
 	router.GET("/api/project/:name", c.getProject)
 	router.GET("/api/project/list", c.listProjects)
 	router.GET("/api/project/:name/request/list", c.listRequests)
 	router.GET("/api/project/:name/balance/:wallet", c.getBalance)
-	router.GET("/api/project/:name/balances", c.getProjectBalances)	
+	router.GET("/api/project/:name/balances", c.getProjectBalances)
 	router.POST("/api/createwallet", c.postWallet)
 	// router.POST("/api/transfer", c.transfer)
 	router.GET("/api/login", loginHandler)

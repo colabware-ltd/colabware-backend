@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -18,7 +19,7 @@ import (
 )
 
 type Request struct {
-	Created             primitive.DateTime   `json:"created"`    
+	Created             primitive.DateTime   `json:"created"`
 	CreatorId           primitive.ObjectID   `json:"creatorId"`
 	CreatorName         string               `json:"creatorName"`
 	Project             primitive.ObjectID   `json:"project"`
@@ -56,7 +57,7 @@ type Response struct {
 
 type Issue struct {
 	Title string `json:"title"`
-	Body string `json:"body"`
+	Body  string `json:"body"`
 }
 
 // TODO: Add request expiry date
@@ -75,7 +76,7 @@ func (con Connection) postRequest(c *gin.Context) {
 	}
 	err = con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
 	log.Println(user.Login)
-	if err != nil { 
+	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
@@ -97,8 +98,8 @@ func (con Connection) postRequest(c *gin.Context) {
 	log.Println(project.GitHub.RepoOwner)
 
 	f := Issue{
-		Title:  r.Name,
-		Body: "**[" + r.Categories[0] + "]** " + r.Description + "\n___\n**This request was created with Colabware.** For more information on claiming or contributing to the funds allocated for its development, view the original request [here]().",
+		Title: r.Name,
+		Body:  "**[" + r.Categories[0] + "]** " + r.Description + "\n___\n**This request was created with Colabware.** For more information on claiming or contributing to the funds allocated for its development, view the original request [here]().",
 	}
 	data, err := json.Marshal(f)
 	if err != nil {
@@ -106,16 +107,16 @@ func (con Connection) postRequest(c *gin.Context) {
 	}
 	reader := bytes.NewReader(data)
 	log.Println(reader)
-	
+
 	var resTarget struct {
 		Number uint64 `bson:"number"`
 	}
-	res, err := client.Post("https://api.github.com/repos/" + project.GitHub.RepoOwner + "/" + project.GitHub.RepoName + "/issues", "application/vnd.github+json", reader)
+	res, err := client.Post("https://api.github.com/repos/"+project.GitHub.RepoOwner+"/"+project.GitHub.RepoName+"/issues", "application/vnd.github+json", reader)
 	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
-    defer res.Body.Close()
+	defer res.Body.Close()
 	err = json.NewDecoder(res.Body).Decode(&resTarget)
 
 	r.GithubIssue = resTarget.Number
@@ -140,7 +141,7 @@ func (con Connection) postRequest(c *gin.Context) {
 }
 
 func (con Connection) listRequests(c *gin.Context) {
-	id,_ := primitive.ObjectIDFromHex(c.Param("name"))
+	id, _ := primitive.ObjectIDFromHex(c.Param("name"))
 	page := c.DefaultQuery("page", "1")
 	limit := c.DefaultQuery("limit", "10")
 	limitInt, err := strconv.ParseInt(limit, 10, 64)
@@ -175,56 +176,55 @@ func (con Connection) listRequests(c *gin.Context) {
 		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
 	}
-	c.IndentedJSON(http.StatusFound, gin.H{"total": total, "results": requestsFiltered} )
+	c.IndentedJSON(http.StatusFound, gin.H{"total": total, "results": requestsFiltered})
 }
 
 func (con Connection) postBounty(c *gin.Context) {
 	projectId := c.Param("name")
-	requestId,_ := primitive.ObjectIDFromHex(c.Param("id"))
+	requestId, _ := primitive.ObjectIDFromHex(c.Param("id"))
 	paymentIntent := c.Query("payment_intent")
 
 	var b BountyContribution
 
 	// Retrieve paymentIntent
-	pi,_ := paymentintent.Get(paymentIntent, nil)
-	if (pi.Status != "succeeded") {
+	pi, _ := paymentintent.Get(paymentIntent, nil)
+	if pi.Status != "succeeded" {
 		return
 	}
-	
+
 	userId := sessions.Default(c).Get("user-id")
 	var user struct {
 		ID    primitive.ObjectID `bson:"_id, omitempty"`
 		Login string             `bson:"login, omitempty"`
-
 	}
 	err := con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
-	if err != nil { 
+	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
 	b.CreatorId = user.ID
 	b.CreatorName = user.Login
-	b.AmountReceived = float32(pi.AmountReceived)/100
+	b.AmountReceived = float32(pi.AmountReceived) / 100
 	b.PaymentIntent = paymentIntent
 
 	selector := bson.M{"_id": requestId}
 
 	var r Request
 	err = con.Requests.FindOne(context.TODO(), selector).Decode(&r)
-	if err != nil { 
+	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
 
 	update := bson.M{
 		"$push": bson.M{"bountycontributions": b},
-		"$set" : bson.M{
+		"$set": bson.M{
 			"bounty": r.Bounty + b.AmountReceived,
 		},
 	}
 	_, err = con.Requests.UpdateOne(context.TODO(), selector, update)
 
-	c.Redirect(http.StatusFound, "/project/" + projectId)
+	c.Redirect(http.StatusFound, "/project/"+projectId)
 }
 
 // func (con Connection) postRequestResponse(c *gin.Context) {
@@ -242,7 +242,7 @@ func (con Connection) postBounty(c *gin.Context) {
 // 		ID primitive.ObjectID `bson:"_id, omitempty"`
 // 	}
 // 	e := con.Users.FindOne(context.TODO(), bson.M{"email": userId}).Decode(&user)
-// 	if e != nil { 
+// 	if e != nil {
 // 		log.Printf("%v", e)
 // 		return
 // 	}
@@ -250,7 +250,7 @@ func (con Connection) postBounty(c *gin.Context) {
 
 // 	selector := bson.M{"name": project}
 
-// 	// Update 
+// 	// Update
 // 	update := bson.M{
 // 		"requests": bson.M{
 // 			"$elemMatch": {}
@@ -277,7 +277,7 @@ func (con Connection) postBounty(c *gin.Context) {
 // 		ID primitive.ObjectID `bson:"_id, omitempty"`
 // 	}
 // 	e := con.Users.FindOne(context.TODO(), bson.M{"email": userId}).Decode(&user)
-// 	if e != nil { 
+// 	if e != nil {
 // 		log.Printf("%v", e)
 // 		return
 // 	}
