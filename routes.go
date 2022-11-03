@@ -23,28 +23,33 @@ func authorizeRequest() gin.HandlerFunc {
 	}
 }
 
-func initializeRoutes(c Connection) {
+func initializeRoutes(db Connection) {
 	// Handle the index route
 	authorized := router.Group("/api/user")
 	authorized.Use(authorizeRequest())
 	{
-		authorized.POST("/project", c.postProject)
-		authorized.POST("/project/:id/request", c.postRequest)
-		authorized.GET("/project/:name/request/:id/bounty", c.postBounty)
+		authorized.POST("/project", db.postProject)
+		authorized.POST("/project/:project/request", db.postRequest)
+		authorized.GET("/project/:project/request/:request/contribution", db.postContribution)
+		authorized.GET("/project/branches/:owner/:repo", getProjectBranches)
+		authorized.POST("/request/:request/proposal", db.postProposal)
+		authorized.GET("/request/:request/proposal/:proposal/select", db.postSelectedProposal)
 		// authorized.POST("/project/:project/request/:request/vote", c.postRequestVote)
-		// authorized.POST("/project/:project/request/:request/response", c.postRequestResponse)
-		authorized.GET("/logout", c.logout)
-		authorized.GET("/", c.getUser)
-		authorized.POST("/token-payment", c.createTokenPayment)
+		authorized.GET("/logout", db.logout)
+		authorized.GET("/", db.getUser)
+		authorized.GET("/stripe", db.stripeAccountLink)
+		authorized.GET("/stripe/verify", db.stripeVerify)
+		authorized.POST("/token-payment", db.createTokenPayment)
 	}
-	router.GET("/api", hello)
-	router.GET("/api/project/:name", c.getProject)
-	router.GET("/api/project/list", c.listProjects)
-	router.GET("/api/project/:name/request/list", c.listRequests)
-	router.GET("/api/project/:name/balance/:wallet", c.getBalance)
-	router.GET("/api/project/:name/balances", c.getProjectBalances)
-	router.POST("/api/createwallet", c.postWallet)
+	router.GET("/api/project/:project", db.getProject)
+	router.GET("/api/project/list", db.getProjects)
+	router.GET("/api/project/:project/request/list", db.getRequests)
+	router.GET("/api/project/:project/balance/:wallet", db.getBalance)
+	router.GET("/api/project/:project/balances", db.getProjectBalances)
+	router.GET("/api/request/:request/proposals", db.getProposals)
+	router.GET("/api/request/:request/contributions", db.getContributions)
+	router.POST("/api/createwallet", db.postWallet)
 	// router.POST("/api/transfer", c.transfer)
 	router.GET("/api/login", loginHandler)
-	router.GET("/api/auth", c.authHandler)
+	router.GET("/api/auth", db.authHandler)
 }

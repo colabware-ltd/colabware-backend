@@ -76,5 +76,5 @@ func (con Connection) createTokenPayment(c *gin.Context) {
 	}
 
 	// Return client secret
-	c.JSON(http.StatusOK, gin.H{"clientSecret": pi.ClientSecret})
+	c.JSON(http.StatusOK, gin.H{"client_secret": pi.ClientSecret})
 }

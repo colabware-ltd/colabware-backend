@@ -11,6 +11,9 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/account"
+	"github.com/stripe/stripe-go/v72/accountlink"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/oauth2"
@@ -19,10 +22,16 @@ import (
 var client *http.Client
 
 type User struct {
-	Login              string               `json:"login"`
-	Avatar             string               `json:"avatar_url"`
-	WalletAddress      string               `json:"wallet_address"`
-	ProjectsMaintained []primitive.ObjectID `json:"projects_maintained"`
+	Login              string               `json:"login" bson:"login,omitempty"`
+	Avatar             string               `json:"avatar_url" bson:"avatar_url,omitempty"`
+	WalletAddress      string               `json:"wallet_address" bson:"wallet_address,omitempty"`
+	ProjectsMaintained []primitive.ObjectID `json:"projects_maintained" bson:"projects_maintained,omitempty"`
+	StripeAccount      StripeAccount        `json:"stripe_account" bson:"stripe_account,omitempty"`
+}
+
+type StripeAccount struct {
+	AccountID string `json:"account_id" bson:"account_id,omitempty"`
+	Status    string `json:"status" bson:"status,omitempty"`
 }
 
 func loginHandler(c *gin.Context) {
@@ -156,4 +165,78 @@ func (con Connection) logout(c *gin.Context) {
 		log.Println(err)
 		return
 	}
+}
+
+func (con Connection) stripeAccountLink(c *gin.Context) {
+	userId := sessions.Default(c).Get("user-id")
+	var accountId string
+
+	var user User
+	userSelector := bson.M{
+		"login": userId,
+	}
+	err := con.Users.FindOne(context.TODO(), userSelector).Decode(&user)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	// Create Stripe account for user if one doesn't exist in DB
+	if user.StripeAccount.AccountID == "" {
+		params := &stripe.AccountParams{
+			Type: stripe.String(string(stripe.AccountTypeStandard)),
+		}
+		result, _ := account.New(params)
+
+		accountId = result.ID
+
+		userUpdate := bson.M{
+			"$set": bson.M{
+				"stripe_account": bson.M{
+					"status":     "created",
+					"account_id": result.ID,
+				},
+			},
+		}
+		_, err = con.Users.UpdateOne(context.TODO(), userSelector, userUpdate)
+		if err != nil {
+			log.Printf("%v", err)
+			c.IndentedJSON(http.StatusInternalServerError, nil)
+			return
+		}
+	} else {
+		accountId = user.StripeAccount.AccountID
+	}
+
+	params := &stripe.AccountLinkParams{
+		Account:    stripe.String(accountId),
+		RefreshURL: stripe.String("https://localhost:3000/"),
+		ReturnURL:  stripe.String("https://localhost:3000/api/user/stripe/verify"),
+		Type:       stripe.String("account_onboarding"),
+	}
+	result, _ := accountlink.New(params)
+
+	c.JSON(http.StatusOK, gin.H{"url": result.URL})
+}
+
+func (con Connection) stripeVerify(c *gin.Context) {
+	userId := sessions.Default(c).Get("user-id")
+
+	userSelector := bson.M{
+		"login": userId,
+	}
+	userUpdate := bson.M{
+		"$set": bson.M{
+			"stripe_account.status": "linked",
+		},
+	}
+	_, err := con.Users.UpdateOne(context.TODO(), userSelector, userUpdate)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	c.Redirect(http.StatusFound, "/")
 }

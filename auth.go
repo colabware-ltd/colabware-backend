@@ -3,35 +3,17 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"os"
 
 	"golang.org/x/oauth2"
 )
 
-// Credentials which stores google ids.
-type Credentials struct {
-    Cid string `json:"cid"`
-    Csecret string `json:"csecret"`
-}
-
-var cred Credentials
 var conf *oauth2.Config
 var state string
 
-func initAuth() {
-    file, err := ioutil.ReadFile("./creds.json")
-    if err != nil {
-        fmt.Printf("File error: %v\n", err)
-        os.Exit(1)
-    }
-    json.Unmarshal(file, &cred)
-	
+func initAuth() {	
     conf = &oauth2.Config{
-        ClientID:     cred.Cid,
-        ClientSecret: cred.Csecret,
+        ClientID:     config.GitHubCID,
+        ClientSecret: config.GitHubCSecret,
         // Update RedirectURL
         RedirectURL:  "http://localhost:3000/api/auth",
         Scopes: []string{
