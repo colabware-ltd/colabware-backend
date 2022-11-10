@@ -197,6 +197,7 @@ func (con Connection) handleExpiry(expiry string, requestId primitive.ObjectID) 
 
 func (con Connection) getRequests(c *gin.Context) {
 	id,_ := primitive.ObjectIDFromHex(c.Param("project"))
+	status := c.DefaultQuery("status", "open")
 	page := c.DefaultQuery("page", "1")
 	limit := c.DefaultQuery("limit", "10")
 	limitInt, err := strconv.ParseInt(limit, 10, 64)
@@ -211,7 +212,7 @@ func (con Connection) getRequests(c *gin.Context) {
 		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
 	}
-	selector := bson.M{"project": id}
+	selector := bson.M{"project": id, "status": status}
 	options := options.Find()
 	// options.SetProjection(bson.M{"name": 1, "categories": 1, "description": 1, "bounty": 1, "created": 1, "_id": 0})
 	options.SetLimit(limitInt)
