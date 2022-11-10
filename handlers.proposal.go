@@ -37,6 +37,12 @@ type PullRequest struct {
 	Base   string `json:"base" bson:"base,omitempty"`
 }
 
+type GitHubError struct {
+	Resource string `json:"resource" bson:"resource,omitempty"`
+	Code     string `json:"code" bson:"code,omitempty"`
+	Message  string `json:"message" bson:"message,omitempty"`
+}
+
 func (con Connection) postProposal(c *gin.Context) {
 	requestId,_ := primitive.ObjectIDFromHex(c.Param("request"))
 	var proposal Proposal
@@ -67,7 +73,9 @@ func (con Connection) postProposal(c *gin.Context) {
 	reader := bytes.NewReader(data)
 
 	var resTarget struct {
-		Number uint64 `bson:"number"`
+		Number  uint64        `json:"number" bson:"number,omitempty"`
+		Message string        `json:"message" bson:"message,omitempty"`
+		Errors  []GitHubError `json:"errors" bson:"errors,omitempty"`
 	}
 
 	res, err := client.Post("https://api.github.com/repos/" + proposal.Repository + "/pulls", "application/vnd.github+json", reader)
@@ -77,6 +85,10 @@ func (con Connection) postProposal(c *gin.Context) {
 	}
     defer res.Body.Close()
 	err = json.NewDecoder(res.Body).Decode(&resTarget)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
 
 	// Create proposal in DB if pull request successfully created
 	if res.StatusCode == 201 {
@@ -97,9 +109,12 @@ func (con Connection) postProposal(c *gin.Context) {
 			log.Printf("%v", err)
 			return
 		}
+		c.IndentedJSON(http.StatusCreated, gin.H{})
+
+	} else {
+		c.IndentedJSON(http.StatusUnprocessableEntity, resTarget)
 	}
 
-	c.IndentedJSON(http.StatusCreated, gin.H{})
 }
 
 func (con Connection) getProposals(c *gin.Context) {
