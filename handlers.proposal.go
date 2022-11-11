@@ -18,7 +18,7 @@ type Proposal struct {
 	CreatorName       string             `json:"creator_name" bson:"creator_name,omitempty"`
 	RequestId         primitive.ObjectID `json:"request_id" bson:"request_id,omitempty"`
 	Repository        string             `json:"repository" bson:"repository,omitempty"`
-	ContributionTotal float32            `json:"contribution_total" bson:"contribution_total,omitempty"`
+	ContributionTotal float32            `json:"contribution_total" bson:"contribution_total"`
 	PullRequest       PullRequest        `json:"pull_request" bson:"pull_request,omitempty"`
 	PullRequestNumber uint64             `json:"pull_request_number" bson:"pull_request_number,omitempty"`
 	PullRequestRepo   string             `json:"pull_request_repo" bson:"pull_request_repo,omitempty"`
@@ -65,6 +65,7 @@ func (con Connection) postProposal(c *gin.Context) {
 	proposal.CreatorId = user.ID
 	proposal.CreatorName = user.Login
 	proposal.RequestId = requestId
+	proposal.ContributionTotal = 0
 
 	data, err := json.Marshal(proposal.PullRequest)
 	if err != nil {
