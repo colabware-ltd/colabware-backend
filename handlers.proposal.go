@@ -18,7 +18,7 @@ type Proposal struct {
 	CreatorName       string             `json:"creator_name" bson:"creator_name,omitempty"`
 	RequestId         primitive.ObjectID `json:"request_id" bson:"request_id,omitempty"`
 	Repository        string             `json:"repository" bson:"repository,omitempty"`
-	ContributionTotal float32            `json:"contribution_total" bson:"contribution_total,omitempty"`
+	ContributionTotal float32            `json:"contribution_total" bson:"contribution_total"`
 	PullRequest       PullRequest        `json:"pull_request" bson:"pull_request,omitempty"`
 	PullRequestNumber uint64             `json:"pull_request_number" bson:"pull_request_number,omitempty"`
 	PullRequestRepo   string             `json:"pull_request_repo" bson:"pull_request_repo,omitempty"`
@@ -35,6 +35,12 @@ type PullRequest struct {
 	Body   string `json:"body" bson:"body,omitempty"`
 	Head   string `json:"head" bson:"head,omitempty"`
 	Base   string `json:"base" bson:"base,omitempty"`
+}
+
+type GitHubError struct {
+	Resource string `json:"resource" bson:"resource,omitempty"`
+	Code     string `json:"code" bson:"code,omitempty"`
+	Message  string `json:"message" bson:"message,omitempty"`
 }
 
 func (con Connection) postProposal(c *gin.Context) {
@@ -59,6 +65,7 @@ func (con Connection) postProposal(c *gin.Context) {
 	proposal.CreatorId = user.ID
 	proposal.CreatorName = user.Login
 	proposal.RequestId = requestId
+	proposal.ContributionTotal = 0
 
 	data, err := json.Marshal(proposal.PullRequest)
 	if err != nil {
@@ -67,7 +74,9 @@ func (con Connection) postProposal(c *gin.Context) {
 	reader := bytes.NewReader(data)
 
 	var resTarget struct {
-		Number uint64 `bson:"number"`
+		Number  uint64        `json:"number" bson:"number,omitempty"`
+		Message string        `json:"message" bson:"message,omitempty"`
+		Errors  []GitHubError `json:"errors" bson:"errors,omitempty"`
 	}
 
 	res, err := client.Post("https://api.github.com/repos/" + proposal.Repository + "/pulls", "application/vnd.github+json", reader)
@@ -77,6 +86,10 @@ func (con Connection) postProposal(c *gin.Context) {
 	}
     defer res.Body.Close()
 	err = json.NewDecoder(res.Body).Decode(&resTarget)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
 
 	// Create proposal in DB if pull request successfully created
 	if res.StatusCode == 201 {
@@ -97,9 +110,12 @@ func (con Connection) postProposal(c *gin.Context) {
 			log.Printf("%v", err)
 			return
 		}
+		c.IndentedJSON(http.StatusCreated, gin.H{})
+
+	} else {
+		c.IndentedJSON(http.StatusUnprocessableEntity, resTarget)
 	}
 
-	c.IndentedJSON(http.StatusCreated, gin.H{})
 }
 
 func (con Connection) getProposals(c *gin.Context) {
