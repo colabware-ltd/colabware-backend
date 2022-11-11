@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -20,20 +21,20 @@ import (
 )
 
 type Request struct {
-	Created            primitive.DateTime   `json:"created" bson:"created,omitempty"`    
-	CreatorId          primitive.ObjectID   `json:"creator_id" bson:"creator_id,omitempty"`
-	CreatorName        string               `json:"creator_name" bson:"creator_name,omitempty"`
-	Project            primitive.ObjectID   `json:"project" bson:"project,omitempty"`
-	Name               string               `json:"name" bson:"name,omitempty"`
-	Description        string               `json:"description" bson:"description,omitempty"`
-	Expiry             string               `json:"expiry" bson:"expiry,omitempty"`
-	Categories         []string             `json:"categories" bson:"categories,omitempty"`
-	Contributions      []primitive.ObjectID `json:"contributions" bson:"contributions,omitempty"`
-	ContributionTotal  float32              `json:"contribution_total" bson:"contribution_total,omitempty"`
-	ProjectVotes       []ProjectVote        `json:"project_votes" bson:"project_votes,omitempty"`
-	Proposals          []primitive.ObjectID `json:"proposals" bson:"proposals,omitempty"`
-	ProposalMerged     primitive.ObjectID   `json:"proposal_merged" bson:"proposal_merged,omitempty"`
-	GithubIssue        uint64               `json:"github_issue" bson:"github_issue,omitempty"`
+	Created           primitive.DateTime   `json:"created" bson:"created,omitempty"`
+	CreatorId         primitive.ObjectID   `json:"creator_id" bson:"creator_id,omitempty"`
+	CreatorName       string               `json:"creator_name" bson:"creator_name,omitempty"`
+	Project           primitive.ObjectID   `json:"project" bson:"project,omitempty"`
+	Name              string               `json:"name" bson:"name,omitempty"`
+	Description       string               `json:"description" bson:"description,omitempty"`
+	Expiry            string               `json:"expiry" bson:"expiry,omitempty"`
+	Categories        []string             `json:"categories" bson:"categories,omitempty"`
+	Contributions     []primitive.ObjectID `json:"contributions" bson:"contributions,omitempty"`
+	ContributionTotal float32              `json:"contribution_total" bson:"contribution_total,omitempty"`
+	ProjectVotes      []ProjectVote        `json:"project_votes" bson:"project_votes,omitempty"`
+	Proposals         []primitive.ObjectID `json:"proposals" bson:"proposals,omitempty"`
+	ProposalMerged    primitive.ObjectID   `json:"proposal_merged" bson:"proposal_merged,omitempty"`
+	GithubIssue       uint64               `json:"github_issue" bson:"github_issue,omitempty"`
 	Status            string               `json:"status" bson:"status,omitempty"`
 }
 
@@ -63,7 +64,7 @@ func (con Connection) postRequest(c *gin.Context) {
 	}
 	err = con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
 	log.Println(user.Login)
-	if err != nil { 
+	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
@@ -82,8 +83,8 @@ func (con Connection) postRequest(c *gin.Context) {
 	}
 
 	f := Issue{
-		Title:  r.Name,
-		Body: "**[" + r.Categories[0] + "]** " + r.Description + "\n___\n**This request was created with Colabware.** For more information on claiming or contributing to the funds allocated for its development, view the original request [here]().",
+		Title: r.Name,
+		Body:  "**[" + r.Categories[0] + "]** " + r.Description + "\n___\n**This request was created with Colabware.** For more information on claiming or contributing to the funds allocated for its development, view the original request [here]().",
 	}
 	data, err := json.Marshal(f)
 	if err != nil {
@@ -91,16 +92,16 @@ func (con Connection) postRequest(c *gin.Context) {
 	}
 	reader := bytes.NewReader(data)
 	log.Println(reader)
-	
+
 	var resTarget struct {
 		Number uint64 `bson:"number"`
 	}
-	res, err := client.Post("https://api.github.com/repos/" + project.GitHub.RepoOwner + "/" + project.GitHub.RepoName + "/issues", "application/vnd.github+json", reader)
+	res, err := client.Post("https://api.github.com/repos/"+project.GitHub.RepoOwner+"/"+project.GitHub.RepoName+"/issues", "application/vnd.github+json", reader)
 	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
-    defer res.Body.Close()
+	defer res.Body.Close()
 	err = json.NewDecoder(res.Body).Decode(&resTarget)
 
 	r.GithubIssue = resTarget.Number
@@ -143,16 +144,16 @@ func (con Connection) handleExpiry(expiry string, requestId primitive.ObjectID) 
 
 		// Get request using request ID
 		err = con.Requests.FindOne(context.TODO(), requestSelector).Decode(&request)
-		if err != nil { 
+		if err != nil {
 			log.Printf("%v", err)
 			return
 		}
 
 		// If no proposals submitted, refund contributors
 		if len(request.Proposals) == 0 || request.Proposals == nil {
-			
+
 			// Find all contributions for request to refund
-			filterCursor, err := con.Contributions.Find(context.TODO(), bson.M{ "request_id": requestId })
+			filterCursor, err := con.Contributions.Find(context.TODO(), bson.M{"request_id": requestId})
 			if err != nil {
 				log.Printf("%v", err)
 				return
@@ -163,7 +164,7 @@ func (con Connection) handleExpiry(expiry string, requestId primitive.ObjectID) 
 				log.Printf("%v", err)
 				return
 			}
-			
+
 			// TODO: Add transaction collection in DB
 			for _, contribution := range contributionsFiltered {
 				for _, transaction := range contribution.Transactions {
@@ -232,5 +233,5 @@ func (con Connection) getRequests(c *gin.Context) {
 		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
 	}
-	c.IndentedJSON(http.StatusFound, gin.H{"total": total, "results": requestsFiltered} )
+	c.IndentedJSON(http.StatusFound, gin.H{"total": total, "results": requestsFiltered})
 }

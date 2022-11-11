@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
-	"log"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -25,6 +26,7 @@ type Connection struct {
 	Proposals     *mongo.Collection
 	Users         *mongo.Collection
 	Wallets       *mongo.Collection
+	TokenPayments *mongo.Collection
 }
 
 func initDB() *mongo.Client {
@@ -52,6 +54,8 @@ func initDB() *mongo.Client {
 
 func main() {
 	var err error
+	log.SetReportCaller(true)
+
 	config, err = LoadConfig(".")
 	if err != nil {
 		log.Fatal("cannot load config:", err)
@@ -74,9 +78,14 @@ func main() {
 		Proposals:     dbClient.Database("colabware").Collection("proposals"),
 		Users:         dbClient.Database("colabware").Collection("users"),
 		Wallets:       dbClient.Database("colabware").Collection("wallets"),
+		TokenPayments: dbClient.Database("colabware").Collection("token_payments"),
 	}
 
 	// Set API key for Stripe
+	// Start payment processors
+	//c := make(chan string)
+	go dbConn.tokenPaymentProcessor()
+
 	stripe.Key = config.StripeKey
 
 	// Initialize GitHub auth

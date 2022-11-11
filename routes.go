@@ -1,8 +1,9 @@
 package main
 
 import (
-	"log"
 	"net/http"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -38,13 +39,13 @@ func initializeRoutes(db Connection) {
 		authorized.GET("/", db.getUser)
 		authorized.GET("/stripe", db.stripeAccountLink)
 		authorized.GET("/stripe/verify", db.stripeVerify)
-		authorized.POST("/payment-intent", db.createPaymentIntent)
+		authorized.POST("/token-payment", db.createTokenPayment)
 	}
 	router.GET("/api/project/:project", db.getProject)
 	router.GET("/api/project/list", db.getProjects)
 	router.GET("/api/project/:project/request/list", db.getRequests)
 	router.GET("/api/project/:project/balance/:wallet", db.getBalance)
-	router.GET("/api/project/:project/balances", db.getProjectBalances)	
+	router.GET("/api/project/:project/balances", db.getProjectBalances)
 	router.GET("/api/request/:request/proposals", db.getProposals)
 	router.GET("/api/request/:request/contributions", db.getContributions)
 	router.POST("/api/createwallet", db.postWallet)

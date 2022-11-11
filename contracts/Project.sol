@@ -29,6 +29,10 @@ contract Project {
         return reservedTokens;
     }
 
+    function getTokenAddress() public view returns (address objectAddress) {
+        return address(token);
+    }
+
     function getTokenSupply() public view returns (uint256) {
         return token.totalSupply();
     }

@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"math/big"
 	"net/http"
 	"strconv"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
 	"github.com/colabware-ltd/colabware-backend/utilities"
@@ -37,15 +39,15 @@ type Project struct {
 type Token struct {
 	Name             string  `json:"name"`
 	Symbol           string  `json:"symbol"`
-	Price            float32 `json:"price"`
-	TotalSupply      int64   `json:"totalSupply"`
+	Price            float32 `json:"price,string"`
+	TotalSupply      big.Int `json:"totalSupply"`
 	MaintainerSupply int64   `json:"maintainerSupply"`
 }
 
 type GitHub struct {
-	RepoOwner  string       `json:"repoOwner"`
-	RepoName   string       `json:"repoName"`
-	Forks      []GitHubFork `json:"forks"`    
+	RepoOwner string       `json:"repoOwner"`
+	RepoName  string       `json:"repoName"`
+	Forks     []GitHubFork `json:"forks"`
 }
 
 type GitHubFork struct {
@@ -69,7 +71,7 @@ func (con Connection) postProject(c *gin.Context) {
 		ID primitive.ObjectID `bson:"_id, omitempty"`
 	}
 	e := con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
-	if e != nil { 
+	if e != nil {
 		log.Printf("%v", e)
 		return
 	}
@@ -97,7 +99,7 @@ func (con Connection) postProject(c *gin.Context) {
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
 	update = bson.M{
 		"$set": bson.M{
-			"projectwallet": walletId,
+			"projectwallet":  walletId,
 			"projectaddress": projectAddress.Hex(),
 		},
 	}
@@ -120,7 +122,7 @@ func (con Connection) getProject(c *gin.Context) {
 		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
 	}
-	
+
 	// If user is authenticated, get forks from GitHub API
 	if sessions.Default(c).Get("user-id") != nil {
 		var resTarget []GitHubFork
@@ -138,7 +140,7 @@ func (con Connection) getProject(c *gin.Context) {
 		project.GitHub.Forks = resTarget
 	}
 
-	c.IndentedJSON(http.StatusFound, project)	
+	c.IndentedJSON(http.StatusFound, project)
 }
 
 func getProjectBranches(c *gin.Context) {
@@ -181,9 +183,9 @@ func (con Connection) getProjectBalances(c *gin.Context) {
 	maintainerBalance, maintainerReserved, investorBalance, _ := contract.ListBalances(nil)
 
 	c.IndentedJSON(http.StatusFound, gin.H{
-		"maintainerBalance": maintainerBalance, 
-		"maintainerReserved": maintainerReserved, 
-		"investorBalance": investorBalance,
+		"maintainerBalance":  maintainerBalance,
+		"maintainerReserved": maintainerReserved,
+		"investorBalance":    investorBalance,
 	})
 }
 
@@ -221,5 +223,5 @@ func (con Connection) getProjects(c *gin.Context) {
 		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
 	}
-	c.IndentedJSON(http.StatusFound, gin.H{"total": total, "results": projectsFiltered} )
+	c.IndentedJSON(http.StatusFound, gin.H{"total": total, "results": projectsFiltered})
 }

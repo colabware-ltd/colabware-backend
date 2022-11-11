@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/big"
 	"net/http"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/colabware-ltd/colabware-backend/contracts"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -21,7 +23,10 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/params"
+	"golang.org/x/crypto/sha3"
 )
+
+const ONE_TOKEN = 1000000000000000000
 
 type Wallet struct {
 	Owner      primitive.ObjectID `json:"owner"`
@@ -34,11 +39,26 @@ type CreateWallet struct {
 	Owner primitive.ObjectID `json:"owner"`
 }
 
-type TransferRequest struct {
+type TransferETHRequest struct {
 	// 'Wallet Name' must match an existing wallet in the database
 	Wallet primitive.ObjectID `json:"walletName" binding:"required"`
 	To     string             `json:"to" binding:"required"`
 	Amount float64            `json:"amount" binding:"required"`
+}
+
+type TransferTokenRequest struct {
+	// 'Wallet Name' must match an existing wallet in the database
+	FromWallet   primitive.ObjectID `json:"from_wallet" binding:"required"`
+	ToWallet     primitive.ObjectID `json:"to_wallet" binding:"required"`
+	Amount       float64            `json:"amount" binding:"required"`
+	TokenAddress common.Address
+}
+
+type TransferBetweenWalletsRequest struct {
+	// 'Wallet Name' must match an existing wallet in the database
+	FromWallet primitive.ObjectID `json:"from_wallet" binding:"required"`
+	ToWallet   primitive.ObjectID `json:"to_wallet" binding:"required"`
+	Amount     float64            `json:"amount" binding:"required"`
 }
 
 type ReadBalance struct {
@@ -56,37 +76,60 @@ func (con Connection) postWallet(c *gin.Context) {
 	c.IndentedJSON(http.StatusCreated, wallet)
 }
 
-func (con Connection) transfer(c *gin.Context) {
-	var r TransferRequest
+func (con Connection) handleTransfer(c *gin.Context) {
+	var r TransferETHRequest
 	if err := c.BindJSON(&r); err != nil {
 		log.Printf("%v", err)
 		return
 	}
 
-	wallet := con.getWallet(r.Wallet)
+	if err := con.transferETH(r); err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, "Failed to process the transfer request.")
+		return
+	}
+
+	c.IndentedJSON(http.StatusOK, "tx sent")
+	return
+}
+
+func (con Connection) transferBetweenWallets(r TransferBetweenWalletsRequest) error {
+	toWallet := con.getWalletFromID(r.ToWallet)
+	if toWallet == nil {
+		return fmt.Errorf("Wallet not found")
+	}
+
+	transferRequest := TransferETHRequest{
+		Wallet: r.FromWallet,
+		To:     toWallet.Address,
+		Amount: r.Amount,
+	}
+
+	return con.transferETH(transferRequest)
+}
+
+func (con Connection) transferETH(r TransferETHRequest) error {
+	wallet := con.getWalletFromOwner(r.Wallet)
 	if wallet == nil {
-		c.IndentedJSON(http.StatusOK, "Wallet not found")
+		return fmt.Errorf("Wallet not found")
 	}
 
 	// connect to an ethereum node  hosted by infura
-	client, err := ethclient.Dial("https://rinkeby.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	client, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
 
 	if err != nil {
-		log.Printf("Unable to connect to network:%v\n", err)
-		return
+		return fmt.Errorf("Unable to connect to network:%v\n", err)
 	}
 
 	nonce, err := client.PendingNonceAt(context.Background(), common.HexToAddress(wallet.Address))
 	if err != nil {
-		log.Print(err)
-		return
+		return err
 	}
 
 	gasLimit := uint64(21000)
 	gasPrice, err := client.SuggestGasPrice(context.Background())
 	if err != nil {
-		log.Print(err)
-		return
+		return err
 	}
 
 	toAddress := common.HexToAddress(r.To)
@@ -96,32 +139,167 @@ func (con Connection) transfer(c *gin.Context) {
 
 	privateKeyByte, err := hexutil.Decode("0x" + wallet.PrivateKey)
 	if err != nil {
-		log.Print(err)
-		return
+		return err
 	}
 
 	privateKey, err := crypto.ToECDSA(privateKeyByte)
 	if err != nil {
-		log.Print(err)
-		return
+		return err
 	}
 
 	signedTx, err := types.SignTx(tx, types.HomesteadSigner{}, privateKey)
 	if err != nil {
-		log.Print(err)
-		return
+		return err
 	}
 
 	// TODO: Convert to interface to handle user transactions.
 	err = client.SendTransaction(context.Background(), signedTx)
 	if err != nil {
-		log.Print(err)
-		return
+		return err
 	}
 
-	log.Printf("tx sent: %s", signedTx.Hash().Hex())
-	c.IndentedJSON(http.StatusOK, "tx sent")
-	return
+	log.Println("tx sent: %s", signedTx.Hash().Hex())
+	return nil
+}
+
+func (con Connection) transferTokenFromProjectToWallet(projectWallet primitive.ObjectID, toWallet primitive.ObjectID, amount float64, projectAddr common.Address) error {
+	// connect to an ethereum node  hosted by infura
+	blockchain, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	if err != nil {
+		log.Fatalf("Unable to connect to network:%v\n", err)
+	}
+
+	// bind to the project that created the token
+	project, err := contracts.NewProject(projectAddr, blockchain)
+	if err != nil {
+		log.Fatalf("Unable to bind to deployed instance of contract:%v\n", err)
+	}
+
+	tokenAddr, err := project.GetTokenAddress(&bind.CallOpts{})
+
+	transferRequest := TransferTokenRequest{
+		FromWallet:   projectWallet,
+		ToWallet:     toWallet,
+		Amount:       amount,
+		TokenAddress: tokenAddr,
+	}
+
+	err = con.transferToken(transferRequest)
+	if err != nil {
+		return nil
+	}
+
+	return err
+}
+
+func floatToBigInt(val float64) *big.Int {
+	bigval := new(big.Float)
+	bigval.SetFloat64(val)
+	// Set precision if required.
+	// bigval.SetPrec(64)
+
+	oneToken := new(big.Float)
+	oneToken.SetInt(big.NewInt(ONE_TOKEN))
+
+	bigval.Mul(bigval, oneToken)
+
+	result := new(big.Int)
+	bigval.Int(result)
+
+	return result
+}
+
+func (con Connection) transferToken(r TransferTokenRequest) error {
+	fromWallet := con.getWalletFromID(r.FromWallet)
+	if fromWallet == nil {
+		return fmt.Errorf("Wallet not found")
+	}
+
+	toWallet := con.getWalletFromID(r.ToWallet)
+	if toWallet == nil {
+		return fmt.Errorf("Wallet not found")
+	}
+
+	// connect to an ethereum node  hosted by infura
+	blockchain, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	if err != nil {
+		log.Fatalf("Unable to connect to network:%v\n", err)
+	}
+
+	nonce, err := blockchain.PendingNonceAt(context.Background(), common.HexToAddress(fromWallet.Address))
+	if err != nil {
+		return err
+	}
+
+	toAddress := common.HexToAddress(toWallet.Address)
+
+	privateKeyByte, err := hexutil.Decode("0x" + fromWallet.PrivateKey)
+	if err != nil {
+		return err
+	}
+
+	privateKey, err := crypto.ToECDSA(privateKeyByte)
+	if err != nil {
+		return err
+	}
+
+	value := big.NewInt(0) // in wei (0 eth)
+
+	transferFnSignature := []byte("transfer(address,uint256)")
+	hash := sha3.NewLegacyKeccak256()
+	hash.Write(transferFnSignature)
+	methodID := hash.Sum(nil)[:4]
+
+	paddedAddress := common.LeftPadBytes(toAddress.Bytes(), 32)
+
+	amount := floatToBigInt(r.Amount)
+
+	paddedAmount := common.LeftPadBytes(amount.Bytes(), 32)
+
+	var data []byte
+	data = append(data, methodID...)
+	data = append(data, paddedAddress...)
+	data = append(data, paddedAmount...)
+
+	// gasLimit, err := blockchain.EstimateGas(context.Background(), ethereum.CallMsg{
+	// 	To:   &r.TokenAddress,
+	// 	Data: data,
+	// })
+	// if err != nil {
+	// 	log.Fatal(err)
+	// 	return err
+	// }
+	// fmt.Println(gasLimit)
+	gasLimit := uint64(84000)
+	gasPrice, err := blockchain.SuggestGasPrice(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("Token Address: %v", r.TokenAddress)
+	tx := types.NewTransaction(nonce, r.TokenAddress, value, gasLimit, gasPrice, data)
+
+	chainID, err := blockchain.NetworkID(context.Background())
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+
+	err = blockchain.SendTransaction(context.Background(), signedTx)
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+
+	fmt.Println("tx sent: %s", signedTx.Hash().Hex())
+
+	return nil
 }
 
 func (con Connection) createWallet(owner primitive.ObjectID) (primitive.ObjectID, Wallet) {
@@ -190,18 +368,37 @@ func etherToWei(eth *big.Float) *big.Int {
 }
 
 // TODO: Search by ID instead of walletName
-func (con Connection) getWallet(owner primitive.ObjectID) *Wallet {
+func (con Connection) getWalletFromOwner(owner primitive.ObjectID) *Wallet {
 	wallet := &Wallet{}
 	result := con.Wallets.FindOne(context.TODO(), bson.M{"owner": owner})
 
 	if result == nil {
-		log.Printf("Requested wallet %s not found", owner)
+		log.Printf("Requested wallet for Owner: %s not found", owner)
 		return nil
 	}
 
 	err := result.Decode(wallet)
 	if err != nil {
-		log.Printf("Error decoding wallet %s", owner)
+		log.Printf("Error decoding wallet for Owner %s", owner)
+		return nil
+	}
+
+	log.Printf("Wallet found with address %s", wallet.Address)
+	return wallet
+}
+
+func (con Connection) getWalletFromID(id primitive.ObjectID) *Wallet {
+	wallet := &Wallet{}
+	result := con.Wallets.FindOne(context.TODO(), bson.M{"_id": id})
+
+	if result == nil {
+		log.Printf("Requested wallet for ID: %s not found", id)
+		return nil
+	}
+
+	err := result.Decode(wallet)
+	if err != nil {
+		log.Printf("Error decoding wallet for ID: %s", id)
 		return nil
 	}
 
@@ -217,7 +414,7 @@ func (con Connection) getBalance(c *gin.Context) {
 
 func readBalance(project string, wallet string) *big.Int {
 	// Connect to ETH node hosted by Infura
-	client, err := ethclient.Dial("https://rinkeby.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	client, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 		return big.NewInt(-1)
@@ -225,13 +422,13 @@ func readBalance(project string, wallet string) *big.Int {
 
 	// Create contract binding
 	contract, err := contracts.NewProjectCaller(common.HexToAddress(project), client)
-	
+
 	// Get balance associated with wallet address
 	b, err := contract.GetBalance(nil, common.HexToAddress(wallet))
 	if err != nil {
 		log.Fatalf("Unable to get token balance for specified wallet:%v\n", err)
 		return big.NewInt(-1)
 	}
-	
+
 	return b
 }
