@@ -66,6 +66,13 @@ type ReadBalance struct {
 	ProjectAddress common.Address `json:"projectId"`
 }
 
+type TransferTest struct {
+	ProjectWallet  string  `json:"project_wallet"`
+	ToWallet       string  `json:"to_wallet"`
+	Amount         float64 `json:"amount"`
+	ProjectAddress string  `json:"project_address"`
+}
+
 func (con Connection) postWallet(c *gin.Context) {
 	var w CreateWallet
 	if err := c.BindJSON(&w); err != nil {
@@ -161,6 +168,20 @@ func (con Connection) transferETH(r TransferETHRequest) error {
 	log.Println("tx sent: %s", signedTx.Hash().Hex())
 	return nil
 }
+
+func (con Connection) transferTest(c *gin.Context) {
+	var t TransferTest
+	if err := c.BindJSON(&t); err != nil {
+		log.Printf("%v", err)
+		return
+	}
+
+	projectWallet, _ := primitive.ObjectIDFromHex(t.ProjectWallet)
+	toWallet, _ := primitive.ObjectIDFromHex(t.ToWallet)
+	
+	con.transferTokenFromProjectToWallet(projectWallet, toWallet, t.Amount, common.HexToAddress(t.ProjectAddress))
+}
+
 
 func (con Connection) transferTokenFromProjectToWallet(projectWallet primitive.ObjectID, toWallet primitive.ObjectID, amount float64, projectAddr common.Address) error {
 	// connect to an ethereum node  hosted by infura

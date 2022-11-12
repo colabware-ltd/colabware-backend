@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"strconv"
 
@@ -39,8 +40,8 @@ type Token struct {
 	Name             string  `json:"name" bson:"name,omitempty"`
 	Symbol           string  `json:"symbol" bson:"symbol,omitempty"`
 	Price            float32 `json:"price" bson:"price,omitempty"`
-	TotalSupply      int64   `json:"total_supply" bson:"total_supply,omitempty"`
-	MaintainerSupply int64   `json:"maintainer_supply" bson:"maintainer_supply,omitempty"`
+	TotalSupply      float64   `json:"total_supply" bson:"total_supply,omitempty"`
+	MaintainerSupply float64   `json:"maintainer_supply" bson:"maintainer_supply,omitempty"`
 }
 
 type GitHub struct {
@@ -92,7 +93,7 @@ func (con Connection) postProject(c *gin.Context) {
 	walletId, wallet := con.createWallet(result.InsertedID.(primitive.ObjectID))
 
 	// Deploy contract and store address; wait for execution to complete
-	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, p.Token.TotalSupply, p.Token.MaintainerSupply, wallet.Address, config.EthNode, config.EthKey)
+	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, *floatToBigInt(p.Token.TotalSupply), *floatToBigInt(p.Token.MaintainerSupply), wallet.Address, config.EthNode, config.EthKey)
 	log.Printf("Contract pending deploy: 0x%x\n", projectAddress)
 
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
@@ -182,9 +183,9 @@ func (con Connection) getProjectBalances(c *gin.Context) {
 	maintainerBalance, maintainerReserved, investorBalance, _ := contract.ListBalances(nil)
 
 	c.IndentedJSON(http.StatusFound, gin.H{
-		"maintainerBalance":  maintainerBalance,
-		"maintainerReserved": maintainerReserved,
-		"investorBalance":    investorBalance,
+		"maintainerBalance": new(big.Int).Div(maintainerBalance, big.NewInt(ONE_TOKEN)),
+		"maintainerReserved": new(big.Int).Div(maintainerReserved, big.NewInt(ONE_TOKEN)),
+		"investorBalance":    new(big.Int).Div(investorBalance, big.NewInt(ONE_TOKEN)),
 	})
 }
 
