@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"math/big"
 	"net/http"
 	"strconv"
 
@@ -24,30 +23,30 @@ import (
 // be able to access this wallet. Wallet should hold maintainer tokens.
 type Project struct {
 	ID             primitive.ObjectID   `json:"_id,omitempty" bson:"_id,omitempty"`
-	Name           string               `json:"name"`
-	GitHub         GitHub               `json:"github"`
-	Description    string               `json:"description"`
-	Categories     []string             `json:"categories"`
-	Maintainers    []primitive.ObjectID `json:"maintainers"`
-	Token          Token                `json:"token"`
-	ProjectAddress string               `json:"projectAddress"`
-	ProjectWallet  primitive.ObjectID   `json:"wallet"`
-	Requests       []primitive.ObjectID `json:"requests"`
-	Roadmap        []primitive.ObjectID `json:"roadmap"`
+	Name           string               `json:"name" bson:"name,omitempty"`
+	GitHub         GitHub               `json:"github" bson:"github,omitempty"`
+	Description    string               `json:"description" bson:"description,omitempty"`
+	Categories     []string             `json:"categories" bson:"categories,omitempty"`
+	Maintainers    []primitive.ObjectID `json:"maintainers" bson:"maintainers,omitempty"`
+	Token          Token                `json:"token" bson:"token,omitempty"`
+	Address        string               `json:"address" bson:"address,omitempty"`
+	Wallet         primitive.ObjectID   `json:"wallet" bson:"wallet,omitempty"`
+	Requests       []primitive.ObjectID `json:"requests" bson:"requests,omitempty"`
+	Roadmap        []primitive.ObjectID `json:"roadmap" bson:"roadmap,omitempty"`
 }
 
 type Token struct {
-	Name             string  `json:"name"`
-	Symbol           string  `json:"symbol"`
-	Price            float32 `json:"price,string"`
-	TotalSupply      big.Int `json:"totalSupply"`
-	MaintainerSupply int64   `json:"maintainerSupply"`
+	Name             string  `json:"name" bson:"name,omitempty"`
+	Symbol           string  `json:"symbol" bson:"symbol,omitempty"`
+	Price            float32 `json:"price" bson:"price,omitempty"`
+	TotalSupply      int64   `json:"total_supply" bson:"total_supply,omitempty"`
+	MaintainerSupply int64   `json:"maintainer_supply" bson:"maintainer_supply,omitempty"`
 }
 
 type GitHub struct {
-	RepoOwner string       `json:"repoOwner"`
-	RepoName  string       `json:"repoName"`
-	Forks     []GitHubFork `json:"forks"`
+	RepoOwner string       `json:"repo_owner" bson:"repo_owner,omitempty"`
+	RepoName  string       `json:"repo_name" bson:"repo_name,omitempty"`
+	Forks     []GitHubFork `json:"forks" bson:"forks,omitempty"`
 }
 
 type GitHubFork struct {
@@ -99,8 +98,8 @@ func (con Connection) postProject(c *gin.Context) {
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
 	update = bson.M{
 		"$set": bson.M{
-			"projectwallet":  walletId,
-			"projectaddress": projectAddress.Hex(),
+			"wallet":  walletId,
+			"address": projectAddress.Hex(),
 		},
 	}
 	_, err = con.Projects.UpdateOne(context.TODO(), selector, update)

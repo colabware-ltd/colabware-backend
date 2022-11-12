@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, maintainerSupply int64, walletAddress string, ethNode string, key string) common.Address {
+func DeployProject(tokenName string, tokenSymbol string, totalSupply int64, maintainerSupply int64, walletAddress string, ethNode string, key string) common.Address {
 	// Connect to an ethereum node hosted by Infura
 	client, err := ethclient.Dial(ethNode)
 	if err != nil {
@@ -59,7 +59,7 @@ func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, ma
 		client,
 		tokenName,
 		tokenSymbol,
-		&totalSupply,
+		big.NewInt(totalSupply),
 		big.NewInt(maintainerSupply),
 		common.HexToAddress(walletAddress),
 	)
