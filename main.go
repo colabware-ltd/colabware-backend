@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-contrib/sessions"
@@ -19,14 +20,20 @@ var router *gin.Engine
 var store = cookie.NewStore([]byte("secret"))
 var config Config
 
+const NULL_ADDRESS = "0x0000000000000000000000000000000000000000"
+
+var projectAddresses []common.Address
+// var ethSubscription ethereum.Subscription
+// var logs chan types.Log
+
 type Connection struct {
-	Projects      *mongo.Collection
-	Requests      *mongo.Collection
-	Contributions *mongo.Collection
-	Proposals     *mongo.Collection
-	Users         *mongo.Collection
-	Wallets       *mongo.Collection
-	TokenPayments *mongo.Collection
+	Projects        *mongo.Collection
+	Requests        *mongo.Collection
+	Contributions   *mongo.Collection
+	Proposals       *mongo.Collection
+	Users           *mongo.Collection
+	Wallets         *mongo.Collection
+	TokenPayments   *mongo.Collection
 }
 
 func initDB() *mongo.Client {
@@ -72,19 +79,19 @@ func main() {
 	dbClient := initDB()
 	defer dbClient.Disconnect(context.Background())
 	dbConn := Connection{
-		Projects:      dbClient.Database("colabware").Collection("projects"),
-		Requests:      dbClient.Database("colabware").Collection("requests"),
-		Contributions: dbClient.Database("colabware").Collection("contributions"),
-		Proposals:     dbClient.Database("colabware").Collection("proposals"),
-		Users:         dbClient.Database("colabware").Collection("users"),
-		Wallets:       dbClient.Database("colabware").Collection("wallets"),
-		TokenPayments: dbClient.Database("colabware").Collection("token_payments"),
+		Projects:         dbClient.Database("colabware").Collection("projects"),
+		Requests:         dbClient.Database("colabware").Collection("requests"),
+		Contributions:    dbClient.Database("colabware").Collection("contributions"),
+		Proposals:        dbClient.Database("colabware").Collection("proposals"),
+		Users:            dbClient.Database("colabware").Collection("users"),
+		Wallets:          dbClient.Database("colabware").Collection("wallets"),
+		TokenPayments:    dbClient.Database("colabware").Collection("token_payments"),
 	}
 
 	// Set API key for Stripe
 	// Start payment processors
 	//c := make(chan string)
-	go dbConn.tokenPaymentProcessor()
+	// go dbConn.tokenPaymentProcessor()
 
 	stripe.Key = config.StripeKey
 
@@ -93,6 +100,12 @@ func main() {
 
 	// Initialize the routes
 	initializeRoutes(dbConn)
+
+	// Start deployment monitor
+	go dbConn.ethDeploymentMonitor()
+
+	// // Start Ethereum event logging
+	// go dbConn.ethLogger()
 
 	// Start serving the application
 	err = router.Run("localhost:9998")

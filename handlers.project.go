@@ -34,10 +34,12 @@ type Project struct {
 	Wallet         primitive.ObjectID   `json:"wallet" bson:"wallet,omitempty"`
 	Requests       []primitive.ObjectID `json:"requests" bson:"requests,omitempty"`
 	Roadmap        []primitive.ObjectID `json:"roadmap" bson:"roadmap,omitempty"`
+	Status         string               `json:"status" bson:"status,omitempty"`
 }
 
 type Token struct {
 	Name             string  `json:"name" bson:"name,omitempty"`
+	Address          string  `json:"address" bson:"address,omitempty"`
 	Symbol           string  `json:"symbol" bson:"symbol,omitempty"`
 	Price            float32 `json:"price" bson:"price,omitempty"`
 	TotalSupply      float64   `json:"total_supply" bson:"total_supply,omitempty"`
@@ -76,6 +78,7 @@ func (con Connection) postProject(c *gin.Context) {
 		return
 	}
 	p.Maintainers = append(p.Maintainers, user.ID)
+	p.Status = "pending"
 
 	// TODO: Add validation to check whether project with name exists
 	result, err := con.Projects.InsertOne(context.TODO(), p)
@@ -95,6 +98,9 @@ func (con Connection) postProject(c *gin.Context) {
 	// Deploy contract and store address; wait for execution to complete
 	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, *floatToBigInt(p.Token.TotalSupply), *floatToBigInt(p.Token.MaintainerSupply), wallet.Address, config.EthNode, config.EthKey)
 	log.Printf("Contract pending deploy: 0x%x\n", projectAddress)
+
+	// Append to project addresses in memory
+	projectAddresses = append(projectAddresses, projectAddress)
 
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
 	update = bson.M{
@@ -139,7 +145,6 @@ func (con Connection) getProject(c *gin.Context) {
 		}
 		project.GitHub.Forks = resTarget
 	}
-
 	c.IndentedJSON(http.StatusFound, project)
 }
 
@@ -173,19 +178,18 @@ func (con Connection) getProjectBalances(c *gin.Context) {
 		return
 	}
 
-	// Create contract binding
 	contract, err := contracts.NewProjectCaller(common.HexToAddress(project), client)
 	if err != nil {
 		log.Fatalf("Unable to create contract binding:%v\n", err)
 		return
 	}
-
 	maintainerBalance, maintainerReserved, investorBalance, _ := contract.ListBalances(nil)
 
+	// Get Token balance for current user
 	c.IndentedJSON(http.StatusFound, gin.H{
-		"maintainerBalance": new(big.Int).Div(maintainerBalance, big.NewInt(ONE_TOKEN)),
-		"maintainerReserved": new(big.Int).Div(maintainerReserved, big.NewInt(ONE_TOKEN)),
-		"investorBalance":    new(big.Int).Div(investorBalance, big.NewInt(ONE_TOKEN)),
+		"maintainer_balance": new(big.Int).Div(maintainerBalance, big.NewInt(ONE_TOKEN)),
+		"maintainer_reserved": new(big.Int).Div(maintainerReserved, big.NewInt(ONE_TOKEN)),
+		"investor_balance":    new(big.Int).Div(investorBalance, big.NewInt(ONE_TOKEN)),
 	})
 }
 
