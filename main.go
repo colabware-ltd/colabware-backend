@@ -4,7 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-contrib/sessions"
@@ -19,12 +21,7 @@ import (
 var router *gin.Engine
 var store = cookie.NewStore([]byte("secret"))
 var config Config
-
-const NULL_ADDRESS = "0x0000000000000000000000000000000000000000"
-
-var projectAddresses []common.Address
-// var ethSubscription ethereum.Subscription
-// var logs chan types.Log
+var err error
 
 type Connection struct {
 	Projects        *mongo.Collection
@@ -60,7 +57,6 @@ func initDB() *mongo.Client {
 }
 
 func main() {
-	var err error
 	log.SetReportCaller(true)
 
 	config, err = LoadConfig(".")
@@ -101,11 +97,27 @@ func main() {
 	// Initialize the routes
 	initializeRoutes(dbConn)
 
-	// Start deployment monitor
+	// Open WebSocket connection with Ethereum node
+	ethClientWSS, err = ethclient.Dial(config.EthNodeWSS)
+	if err != nil {
+	  log.Fatal(err)
+	}
+	dbConn.getTokenAddresses()
+
+	ethLogs = make(chan types.Log)
+	ethSubQuery = ethereum.FilterQuery{
+		Addresses: ethTokenAddresses,
+	}
+	ethSub, err = ethClientWSS.SubscribeFilterLogs(context.Background(), ethSubQuery, ethLogs)
+	if err != nil {
+  		log.Fatal(err)
+	}
+
+	// Start deployment monitor subroutine
 	go dbConn.ethDeploymentMonitor()
 
-	// // Start Ethereum event logging
-	// go dbConn.ethLogger()
+	// Start Eth logger subrouting
+	go dbConn.ethLogger()
 
 	// Start serving the application
 	err = router.Run("localhost:9998")

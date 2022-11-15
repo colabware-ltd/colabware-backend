@@ -99,9 +99,6 @@ func (con Connection) postProject(c *gin.Context) {
 	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, *floatToBigInt(p.Token.TotalSupply), *floatToBigInt(p.Token.MaintainerSupply), wallet.Address, config.EthNode, config.EthKey)
 	log.Printf("Contract pending deploy: 0x%x\n", projectAddress)
 
-	// Append to project addresses in memory
-	projectAddresses = append(projectAddresses, projectAddress)
-
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
 	update = bson.M{
 		"$set": bson.M{
@@ -185,11 +182,17 @@ func (con Connection) getProjectBalances(c *gin.Context) {
 	}
 	maintainerBalance, maintainerReserved, investorBalance, _ := contract.ListBalances(nil)
 
+	if (maintainerBalance != nil && maintainerReserved != nil && investorBalance != nil) {
+		maintainerBalance = new(big.Int).Div(maintainerBalance, big.NewInt(ONE_TOKEN))
+		maintainerReserved = new(big.Int).Div(maintainerReserved, big.NewInt(ONE_TOKEN))
+		investorBalance = new(big.Int).Div(investorBalance, big.NewInt(ONE_TOKEN))
+	}
+
 	// Get Token balance for current user
 	c.IndentedJSON(http.StatusFound, gin.H{
-		"maintainer_balance": new(big.Int).Div(maintainerBalance, big.NewInt(ONE_TOKEN)),
-		"maintainer_reserved": new(big.Int).Div(maintainerReserved, big.NewInt(ONE_TOKEN)),
-		"investor_balance":    new(big.Int).Div(investorBalance, big.NewInt(ONE_TOKEN)),
+		"maintainer_balance": maintainerBalance,
+		"maintainer_reserved": maintainerReserved,
+		"investor_balance":    investorBalance,
 	})
 }
 

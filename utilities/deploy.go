@@ -64,6 +64,7 @@ func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, ma
 		common.HexToAddress(walletAddress),
 	)
 	if err != nil {
+		log.Printf(err.Error())
 		log.Fatalf("Unable to deploy: %v\n", err)
 	}
 

@@ -10,6 +10,7 @@ type Config struct {
 	GitHubCID     string `mapstructure:"GITHUB_CID"`
 	GitHubCSecret string `mapstructure:"GITHUB_CSECRET"`
 	EthNode       string `mapstructure:"ETH_NODE"`
+	EthNodeWSS    string `mapstructure:"ETH_NODE_WSS"`
 	EthKey        string `mapstructure:"ETH_KEY"`	
 }
 

@@ -4,12 +4,15 @@ import (
 	"context"
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson"
 )
+
+const NULL_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 func (con Connection) ethDeploymentMonitor() {
 	for {
@@ -37,10 +40,21 @@ func (con Connection) ethDeploymentMonitor() {
 				}
 				tokenAddress, err := contract.GetTokenAddress(&bind.CallOpts{})
 				if err != nil {
-					log.Printf("Unable get token address:%v\n", err)
 					continue
 				}
 				if tokenAddress.Hex() != NULL_ADDRESS {
+					ethTokenAddresses = append(ethTokenAddresses, tokenAddress)
+
+					log.Printf("New token deployed: %v\n", tokenAddress.Hex())
+
+					ethSubQuery = ethereum.FilterQuery{
+						Addresses: ethTokenAddresses,
+					}
+					ethSub, err = ethClientWSS.SubscribeFilterLogs(context.Background(), ethSubQuery, ethLogs)
+					if err != nil {
+						log.Fatal(err)
+					}
+
 					selector = bson.M{ "address": projectAddress }
 					update := bson.M{
 						"$set": bson.M{
