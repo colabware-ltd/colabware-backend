@@ -66,11 +66,21 @@ func (con Connection) ethLogger() {
 					
 					err = contractAbi.UnpackIntoInterface(&transferEvent, "Transfer", vLog.Data)
 					if err != nil {
-					  log.Fatal(err)
+						log.Printf("%v", err)
+						continue
 					}
 					
 					transferEvent.From = common.HexToAddress(vLog.Topics[1].Hex())
 					transferEvent.To = common.HexToAddress(vLog.Topics[2].Hex())
+
+					_, err := con.TokenEventLogs.InsertOne(context.TODO(), bson.M{
+						"from": transferEvent.From.Hex(),
+						"to": transferEvent.To.Hex(),
+						"tokens": transferEvent.Value.String(),
+					})
+					if err != nil {
+						log.Printf("%v", err)
+					}
 					
 					fmt.Printf("From: %s\n", transferEvent.From.Hex())
 					fmt.Printf("To: %s\n", transferEvent.To.Hex())
@@ -87,6 +97,15 @@ func (con Connection) ethLogger() {
 					
 					approvalEvent.Owner = common.HexToAddress(vLog.Topics[1].Hex())
 					approvalEvent.Spender = common.HexToAddress(vLog.Topics[2].Hex())
+
+					_, err := con.TokenEventLogs.InsertOne(context.TODO(), bson.M{
+						"owner": approvalEvent.Owner.Hex(),
+						"spender": approvalEvent.Spender.Hex(),
+						"tokens": approvalEvent.Value.String(),
+					})
+					if err != nil {
+						log.Printf("%v", err)
+					}
 					
 					fmt.Printf("Token Owner: %s\n", approvalEvent.Owner.Hex())
 					fmt.Printf("Spender: %s\n", approvalEvent.Spender.Hex())

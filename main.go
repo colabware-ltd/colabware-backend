@@ -31,6 +31,7 @@ type Connection struct {
 	Users           *mongo.Collection
 	Wallets         *mongo.Collection
 	TokenPayments   *mongo.Collection
+	TokenEventLogs  *mongo.Collection
 }
 
 func initDB() *mongo.Client {
@@ -82,6 +83,7 @@ func main() {
 		Users:            dbClient.Database("colabware").Collection("users"),
 		Wallets:          dbClient.Database("colabware").Collection("wallets"),
 		TokenPayments:    dbClient.Database("colabware").Collection("token_payments"),
+		TokenEventLogs:   dbClient.Database("colabware").Collection("token_event_logs"),
 	}
 
 	// Set API key for Stripe
