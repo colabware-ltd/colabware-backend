@@ -11,7 +11,8 @@ type Config struct {
 	GitHubCSecret string `mapstructure:"GITHUB_CSECRET"`
 	EthNode       string `mapstructure:"ETH_NODE"`
 	EthNodeWSS    string `mapstructure:"ETH_NODE_WSS"`
-	EthKey        string `mapstructure:"ETH_KEY"`	
+	EthKey        string `mapstructure:"ETH_KEY"`
+	EthAddr       string `mapstructure:"ETH_ADDR"`
 }
 
 // LoadConfig reads configuration from file or environment variables.

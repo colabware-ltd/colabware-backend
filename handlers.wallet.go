@@ -40,14 +40,13 @@ type CreateWallet struct {
 }
 
 type TransferETHRequest struct {
-	// 'Wallet Name' must match an existing wallet in the database
-	Wallet primitive.ObjectID `json:"walletName" binding:"required"`
+	// 'Wallet' must be an ID that matches an existing wallet in the database
+	Wallet primitive.ObjectID `json:"wallet" binding:"required"`
 	To     string             `json:"to" binding:"required"`
 	Amount float64            `json:"amount" binding:"required"`
 }
 
 type TransferTokenRequest struct {
-	// 'Wallet Name' must match an existing wallet in the database
 	FromWallet   primitive.ObjectID `json:"from_wallet" binding:"required"`
 	ToWallet     primitive.ObjectID `json:"to_wallet" binding:"required"`
 	Amount       float64            `json:"amount" binding:"required"`
@@ -55,7 +54,6 @@ type TransferTokenRequest struct {
 }
 
 type TransferBetweenWalletsRequest struct {
-	// 'Wallet Name' must match an existing wallet in the database
 	FromWallet primitive.ObjectID `json:"from_wallet" binding:"required"`
 	ToWallet   primitive.ObjectID `json:"to_wallet" binding:"required"`
 	Amount     float64            `json:"amount" binding:"required"`
@@ -83,23 +81,6 @@ func (con Connection) postWallet(c *gin.Context) {
 	c.IndentedJSON(http.StatusCreated, wallet)
 }
 
-func (con Connection) handleTransfer(c *gin.Context) {
-	var r TransferETHRequest
-	if err := c.BindJSON(&r); err != nil {
-		log.Printf("%v", err)
-		return
-	}
-
-	if err := con.transferETH(r); err != nil {
-		log.Printf("%v", err)
-		c.IndentedJSON(http.StatusInternalServerError, "Failed to process the transfer request.")
-		return
-	}
-
-	c.IndentedJSON(http.StatusOK, "tx sent")
-	return
-}
-
 func (con Connection) transferBetweenWallets(r TransferBetweenWalletsRequest) error {
 	toWallet := con.getWalletFromID(r.ToWallet)
 	if toWallet == nil {
@@ -115,8 +96,63 @@ func (con Connection) transferBetweenWallets(r TransferBetweenWalletsRequest) er
 	return con.transferETH(transferRequest)
 }
 
+func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64) error {
+	wallet := con.getWalletFromID(w)
+	if wallet == nil {
+		return fmt.Errorf("Wallet not found")
+	}
+
+	// connect to an ethereum node  hosted by infura
+	client, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	if err != nil {
+		return fmt.Errorf("Unable to connect to network:%v\n", err)
+	}
+
+	// Declan's wallet with tons of ETH (supposedly)
+	nonce, err := client.PendingNonceAt(context.Background(), common.HexToAddress(config.EthAddr))
+	if err != nil {
+		return err
+	}
+
+	gasLimit := uint64(21000)
+	gasPrice, err := client.SuggestGasPrice(context.Background())
+	if err != nil {
+		return err
+	}
+
+	toAddress := common.HexToAddress(wallet.Address)
+	var data []byte
+	val := new(big.Float).SetFloat64(a)
+	tx := types.NewTransaction(nonce, toAddress, etherToWei(val), gasLimit, gasPrice, data)
+
+	privateKeyByte, err := hexutil.Decode("0x" + config.EthKey)
+	if err != nil {
+		return err
+	}
+
+	privateKey, err := crypto.ToECDSA(privateKeyByte)
+	if err != nil {
+		return err
+	}
+
+	signedTx, err := types.SignTx(tx, types.HomesteadSigner{}, privateKey)
+	if err != nil {
+		return err
+	}
+
+	// TODO: Convert to interface to handle user transactions.
+	err = client.SendTransaction(context.Background(), signedTx)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("tx sent: %s\n", signedTx.Hash().Hex())
+	return nil
+
+}
+
 func (con Connection) transferETH(r TransferETHRequest) error {
-	wallet := con.getWalletFromOwner(r.Wallet)
+	wallet := con.getWalletFromID(r.Wallet)
 	if wallet == nil {
 		return fmt.Errorf("Wallet not found")
 	}
