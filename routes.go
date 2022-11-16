@@ -49,7 +49,7 @@ func initializeRoutes(db Connection) {
 	router.GET("/api/request/:request/proposals", db.getProposals)
 	router.GET("/api/request/:request/contributions", db.getContributions)
 	router.POST("/api/createwallet", db.postWallet)
-	// router.POST("/api/transfer", c.transfer)
+	router.POST("/api/transfer-test", db.transferTest)
 	router.GET("/api/login", loginHandler)
 	router.GET("/api/auth", db.authHandler)
 }

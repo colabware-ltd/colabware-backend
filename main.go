@@ -4,6 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-contrib/sessions"
@@ -18,15 +21,17 @@ import (
 var router *gin.Engine
 var store = cookie.NewStore([]byte("secret"))
 var config Config
+var err error
 
 type Connection struct {
-	Projects      *mongo.Collection
-	Requests      *mongo.Collection
-	Contributions *mongo.Collection
-	Proposals     *mongo.Collection
-	Users         *mongo.Collection
-	Wallets       *mongo.Collection
-	TokenPayments *mongo.Collection
+	Projects        *mongo.Collection
+	Requests        *mongo.Collection
+	Contributions   *mongo.Collection
+	Proposals       *mongo.Collection
+	Users           *mongo.Collection
+	Wallets         *mongo.Collection
+	TokenPayments   *mongo.Collection
+	TokenEventLogs  *mongo.Collection
 }
 
 func initDB() *mongo.Client {
@@ -53,7 +58,6 @@ func initDB() *mongo.Client {
 }
 
 func main() {
-	var err error
 	log.SetReportCaller(true)
 
 	config, err = LoadConfig(".")
@@ -72,19 +76,20 @@ func main() {
 	dbClient := initDB()
 	defer dbClient.Disconnect(context.Background())
 	dbConn := Connection{
-		Projects:      dbClient.Database("colabware").Collection("projects"),
-		Requests:      dbClient.Database("colabware").Collection("requests"),
-		Contributions: dbClient.Database("colabware").Collection("contributions"),
-		Proposals:     dbClient.Database("colabware").Collection("proposals"),
-		Users:         dbClient.Database("colabware").Collection("users"),
-		Wallets:       dbClient.Database("colabware").Collection("wallets"),
-		TokenPayments: dbClient.Database("colabware").Collection("token_payments"),
+		Projects:         dbClient.Database("colabware").Collection("projects"),
+		Requests:         dbClient.Database("colabware").Collection("requests"),
+		Contributions:    dbClient.Database("colabware").Collection("contributions"),
+		Proposals:        dbClient.Database("colabware").Collection("proposals"),
+		Users:            dbClient.Database("colabware").Collection("users"),
+		Wallets:          dbClient.Database("colabware").Collection("wallets"),
+		TokenPayments:    dbClient.Database("colabware").Collection("token_payments"),
+		TokenEventLogs:   dbClient.Database("colabware").Collection("token_event_logs"),
 	}
 
 	// Set API key for Stripe
 	// Start payment processors
 	//c := make(chan string)
-	go dbConn.tokenPaymentProcessor()
+	// go dbConn.tokenPaymentProcessor()
 
 	stripe.Key = config.StripeKey
 
@@ -94,7 +99,29 @@ func main() {
 	// Initialize the routes
 	initializeRoutes(dbConn)
 
-	log.Println("Finished initializing! Ready to rock :D")
+	// Open WebSocket connection with Ethereum node
+	ethClientWSS, err = ethclient.Dial(config.EthNodeWSS)
+	if err != nil {
+	  log.Fatal(err)
+	}
+	dbConn.getTokenAddresses()
+
+	ethLogs = make(chan types.Log)
+	ethSubQuery = ethereum.FilterQuery{
+		Addresses: ethTokenAddresses,
+	}
+	ethSub, err = ethClientWSS.SubscribeFilterLogs(context.Background(), ethSubQuery, ethLogs)
+	if err != nil {
+  		log.Fatal(err)
+	}
+
+	// Start deployment monitor subroutine
+	go dbConn.ethDeploymentMonitor()
+
+	// Start Eth logger subrouting
+	go dbConn.ethLogger()
+
+  log.Println("Finished initializing! Ready to rock :D")
 
 	// Start serving the application
 	err = router.Run("localhost:9998")

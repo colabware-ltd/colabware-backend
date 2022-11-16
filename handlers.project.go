@@ -24,20 +24,22 @@ import (
 // be able to access this wallet. Wallet should hold maintainer tokens.
 type Project struct {
 	ID             primitive.ObjectID   `json:"_id,omitempty" bson:"_id,omitempty"`
-	Name           string               `json:"name"`
-	GitHub         GitHub               `json:"github"`
-	Description    string               `json:"description"`
-	Categories     []string             `json:"categories"`
-	Maintainers    []primitive.ObjectID `json:"maintainers"`
-	Token          Token                `json:"token"`
-	ProjectAddress string               `json:"projectAddress"`
-	ProjectWallet  primitive.ObjectID   `json:"wallet"`
-	Requests       []primitive.ObjectID `json:"requests"`
-	Roadmap        []primitive.ObjectID `json:"roadmap"`
+	Name           string               `json:"name" bson:"name,omitempty"`
+	GitHub         GitHub               `json:"github" bson:"github,omitempty"`
+	Description    string               `json:"description" bson:"description,omitempty"`
+	Categories     []string             `json:"categories" bson:"categories,omitempty"`
+	Maintainers    []primitive.ObjectID `json:"maintainers" bson:"maintainers,omitempty"`
+	Token          Token                `json:"token" bson:"token,omitempty"`
+	Address        string               `json:"address" bson:"address,omitempty"`
+	Wallet         primitive.ObjectID   `json:"wallet" bson:"wallet,omitempty"`
+	Requests       []primitive.ObjectID `json:"requests" bson:"requests,omitempty"`
+	Roadmap        []primitive.ObjectID `json:"roadmap" bson:"roadmap,omitempty"`
+	Status         string               `json:"status" bson:"status,omitempty"`
 }
 
 type Token struct {
 	Name             string  `json:"name"`
+  Address          string  `json:"address" bson:"address,omitempty"`
 	Symbol           string  `json:"symbol"`
 	Price            float32 `json:"price"`
 	TotalSupply      int64   `json:"totalSupply"`
@@ -45,9 +47,9 @@ type Token struct {
 }
 
 type GitHub struct {
-	RepoOwner string       `json:"repoOwner"`
-	RepoName  string       `json:"repoName"`
-	Forks     []GitHubFork `json:"forks"`
+	RepoOwner string       `json:"repo_owner" bson:"repo_owner,omitempty"`
+	RepoName  string       `json:"repo_name" bson:"repo_name,omitempty"`
+	Forks     []GitHubFork `json:"forks" bson:"forks,omitempty"`
 }
 
 type GitHubFork struct {
@@ -84,6 +86,7 @@ func (con Connection) postProject(c *gin.Context) {
 		return
 	}
 	p.Maintainers = append(p.Maintainers, user.ID)
+	p.Status = "pending"
 
 	// TODO: Add validation to check whether project with name exists
 	result, err := con.Projects.InsertOne(context.TODO(), p)
@@ -107,8 +110,8 @@ func (con Connection) postProject(c *gin.Context) {
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
 	update = bson.M{
 		"$set": bson.M{
-			"projectwallet":  walletId,
-			"projectaddress": projectAddress.Hex(),
+			"wallet":  walletId,
+			"address": projectAddress.Hex(),
 		},
 	}
 	_, err = con.Projects.UpdateOne(context.TODO(), selector, update)
@@ -147,7 +150,6 @@ func (con Connection) getProject(c *gin.Context) {
 		}
 		project.GitHub.Forks = resTarget
 	}
-
 	c.IndentedJSON(http.StatusFound, project)
 }
 
@@ -181,19 +183,24 @@ func (con Connection) getProjectBalances(c *gin.Context) {
 		return
 	}
 
-	// Create contract binding
 	contract, err := contracts.NewProjectCaller(common.HexToAddress(project), client)
 	if err != nil {
 		log.Fatalf("Unable to create contract binding:%v\n", err)
 		return
 	}
-
 	maintainerBalance, maintainerReserved, investorBalance, _ := contract.ListBalances(nil)
 
+	if (maintainerBalance != nil && maintainerReserved != nil && investorBalance != nil) {
+		maintainerBalance = new(big.Int).Div(maintainerBalance, big.NewInt(ONE_TOKEN))
+		maintainerReserved = new(big.Int).Div(maintainerReserved, big.NewInt(ONE_TOKEN))
+		investorBalance = new(big.Int).Div(investorBalance, big.NewInt(ONE_TOKEN))
+	}
+
+	// Get Token balance for current user
 	c.IndentedJSON(http.StatusFound, gin.H{
-		"maintainerBalance":  maintainerBalance,
-		"maintainerReserved": maintainerReserved,
-		"investorBalance":    investorBalance,
+		"maintainer_balance": maintainerBalance,
+		"maintainer_reserved": maintainerReserved,
+		"investor_balance":    investorBalance,
 	})
 }
 
