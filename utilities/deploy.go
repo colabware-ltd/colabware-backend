@@ -39,6 +39,7 @@ func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, ma
 	}
 
 	gasPrice, err := client.SuggestGasPrice(context.Background())
+	log.Printf("Suggested gas price: %v", gasPrice.String())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -50,11 +51,15 @@ func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, ma
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 	auth.Value = big.NewInt(0) // in wei
-	// auth.GasLimit = uint64(300000) // in units
-	auth.GasPrice = gasPrice
-	log.Printf(gasPrice.String())
 
-	address, _, _, err := contracts.DeployProject(
+	// For Reference
+	// 3,628,241 unit burnt for contract creation and 10 tokens minted
+	// 3,628,301 unit burnt for contract creation and 100 tokens minted
+	// The contract creation alone with 10 token costed 635,471 units
+	auth.GasLimit = uint64(6000000) // in units
+	auth.GasPrice = gasPrice
+
+	address, transaction, _, err := contracts.DeployProject(
 		auth,
 		client,
 		tokenName,
@@ -64,8 +69,7 @@ func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, ma
 		common.HexToAddress(walletAddress),
 	)
 	if err != nil {
-		log.Printf(err.Error())
-		log.Fatalf("Unable to deploy: %v\n", err)
+		log.Fatalf("Unable to deploy: %v\nTransaction: %v", err, transaction)
 	}
 
 	return address

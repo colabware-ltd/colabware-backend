@@ -38,12 +38,12 @@ type Project struct {
 }
 
 type Token struct {
-	Name             string  `json:"name" bson:"name,omitempty"`
-	Address          string  `json:"address" bson:"address,omitempty"`
-	Symbol           string  `json:"symbol" bson:"symbol,omitempty"`
-	Price            float32 `json:"price" bson:"price,omitempty"`
-	TotalSupply      float64   `json:"total_supply" bson:"total_supply,omitempty"`
-	MaintainerSupply float64   `json:"maintainer_supply" bson:"maintainer_supply,omitempty"`
+	Name             string  `json:"name"`
+  Address          string  `json:"address" bson:"address,omitempty"`
+	Symbol           string  `json:"symbol"`
+	Price            float32 `json:"price"`
+	TotalSupply      int64   `json:"totalSupply"`
+	MaintainerSupply int64   `json:"maintainerSupply"`
 }
 
 type GitHub struct {
@@ -60,12 +60,20 @@ type GitHubFork struct {
 // 	Name string `json:"name,omitempty" bson:"name,omitempty"`
 // }
 
+func (t Token) getBigTotalSupply() *big.Int {
+	i := big.NewInt(t.TotalSupply)
+	return i.Mul(i, big.NewInt(ONE_TOKEN))
+}
+
 func (con Connection) postProject(c *gin.Context) {
 	var p Project
 	if err := c.BindJSON(&p); err != nil {
 		log.Printf("%v", err)
 		return
 	}
+	// Convert Token supply to the right amount
+	log.Printf("TotalTokenSupply: %v\n", p.Token.getBigTotalSupply())
+
 	session := sessions.Default(c)
 	// TODO: Update session to store db ID
 	userId := session.Get("user-id")
@@ -96,7 +104,7 @@ func (con Connection) postProject(c *gin.Context) {
 	walletId, wallet := con.createWallet(result.InsertedID.(primitive.ObjectID))
 
 	// Deploy contract and store address; wait for execution to complete
-	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, *floatToBigInt(p.Token.TotalSupply), *floatToBigInt(p.Token.MaintainerSupply), wallet.Address, config.EthNode, config.EthKey)
+	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, *p.Token.getBigTotalSupply(), p.Token.MaintainerSupply, wallet.Address, config.EthNode, config.EthKey)
 	log.Printf("Contract pending deploy: 0x%x\n", projectAddress)
 
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}

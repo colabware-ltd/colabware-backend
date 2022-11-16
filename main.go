@@ -121,6 +121,8 @@ func main() {
 	// Start Eth logger subrouting
 	go dbConn.ethLogger()
 
+  log.Println("Finished initializing! Ready to rock :D")
+
 	// Start serving the application
 	err = router.Run("localhost:9998")
 	if err != nil {

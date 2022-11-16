@@ -50,13 +50,10 @@ func (con Connection) tokenPaymentProcessor() {
 		options := options.FindOne()
 		err := con.TokenPayments.FindOne(context.TODO(), selector, options).Decode(&request)
 
-		log.Println(request.BuyerWallet)
-
 		if err != nil {
 			// ErrNoDocuments means that the filter did not match any documents in
 			// the collection.
 			if err == mongo.ErrNoDocuments {
-				log.Println("No new token payment order to process")
 				continue
 			}
 
@@ -68,7 +65,7 @@ func (con Connection) tokenPaymentProcessor() {
 		err = con.processPayment(request)
 
 		if err != nil {
-			log.Println("Failed to process token payment: %v", err)
+			log.Printf("Failed to process token payment: %v\n", err)
 			// Update the record to failed
 			con.updatePaymentRecordToFailed(request.ID)
 		} else {

@@ -35,7 +35,7 @@ func TestFetchTokenAddr(t *testing.T) {
 	//gasPrice, err := blockchain.SuggestGasPrice(context.Background())
 
 	// auth.Signer = types.LatestSignerForChainID(big.NewInt(int64(1)))
-	project, _ := contracts.NewProject(common.HexToAddress("0xf58CE892fb3fbBe1caf9BDC3586F932fdB3B0295"), blockchain)
+	project, _ := contracts.NewProject(common.HexToAddress("0xcb1d69AB3893b445F43516DB3e9403430a9e13AF"), blockchain)
 	if err != nil {
 		log.Fatalf("Unable to bind to deployed instance of contract:%v\n", err)
 	}

@@ -165,7 +165,7 @@ func (con Connection) transferETH(r TransferETHRequest) error {
 		return err
 	}
 
-	log.Println("tx sent: %s", signedTx.Hash().Hex())
+	log.Printf("tx sent: %s\n", signedTx.Hash().Hex())
 	return nil
 }
 
@@ -297,7 +297,7 @@ func (con Connection) transferToken(r TransferTokenRequest) error {
 		log.Fatal(err)
 	}
 
-	log.Println("Token Address: %v", r.TokenAddress)
+	log.Printf("Token Address: %v\n", r.TokenAddress)
 	tx := types.NewTransaction(nonce, r.TokenAddress, value, gasLimit, gasPrice, data)
 
 	chainID, err := blockchain.NetworkID(context.Background())
@@ -318,7 +318,7 @@ func (con Connection) transferToken(r TransferTokenRequest) error {
 		return err
 	}
 
-	fmt.Println("tx sent: %s", signedTx.Hash().Hex())
+	fmt.Printf("tx sent: %s\n", signedTx.Hash().Hex())
 
 	return nil
 }
