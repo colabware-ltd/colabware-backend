@@ -23,23 +23,23 @@ import (
 // TODO: Create wallet for project upon creation. Maintainers should then
 // be able to access this wallet. Wallet should hold maintainer tokens.
 type Project struct {
-	ID             primitive.ObjectID   `json:"_id,omitempty" bson:"_id,omitempty"`
-	Name           string               `json:"name" bson:"name,omitempty"`
-	GitHub         GitHub               `json:"github" bson:"github,omitempty"`
-	Description    string               `json:"description" bson:"description,omitempty"`
-	Categories     []string             `json:"categories" bson:"categories,omitempty"`
-	Maintainers    []primitive.ObjectID `json:"maintainers" bson:"maintainers,omitempty"`
-	Token          Token                `json:"token" bson:"token,omitempty"`
-	Address        string               `json:"address" bson:"address,omitempty"`
-	Wallet         primitive.ObjectID   `json:"wallet" bson:"wallet,omitempty"`
-	Requests       []primitive.ObjectID `json:"requests" bson:"requests,omitempty"`
-	Roadmap        []primitive.ObjectID `json:"roadmap" bson:"roadmap,omitempty"`
-	Status         string               `json:"status" bson:"status,omitempty"`
+	ID          primitive.ObjectID   `json:"_id,omitempty" bson:"_id,omitempty"`
+	Name        string               `json:"name" bson:"name,omitempty"`
+	GitHub      GitHub               `json:"github" bson:"github,omitempty"`
+	Description string               `json:"description" bson:"description,omitempty"`
+	Categories  []string             `json:"categories" bson:"categories,omitempty"`
+	Maintainers []primitive.ObjectID `json:"maintainers" bson:"maintainers,omitempty"`
+	Token       Token                `json:"token" bson:"token,omitempty"`
+	Address     string               `json:"address" bson:"address,omitempty"`
+	Wallet      primitive.ObjectID   `json:"wallet" bson:"wallet,omitempty"`
+	Requests    []primitive.ObjectID `json:"requests" bson:"requests,omitempty"`
+	Roadmap     []primitive.ObjectID `json:"roadmap" bson:"roadmap,omitempty"`
+	Status      string               `json:"status" bson:"status,omitempty"`
 }
 
 type Token struct {
 	Name             string  `json:"name"`
-  Address          string  `json:"address" bson:"address,omitempty"`
+	Address          string  `json:"address" bson:"address,omitempty"`
 	Symbol           string  `json:"symbol"`
 	Price            float32 `json:"price"`
 	TotalSupply      int64   `json:"totalSupply"`
@@ -104,7 +104,7 @@ func (con Connection) postProject(c *gin.Context) {
 	walletId, wallet := con.createWallet(result.InsertedID.(primitive.ObjectID))
 
 	// Deploy contract and store address; wait for execution to complete
-	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, *p.Token.getBigTotalSupply(), p.Token.MaintainerSupply, wallet.Address, config.EthNode, config.EthKey)
+	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, *p.Token.getBigTotalSupply(), *big.NewInt(p.Token.MaintainerSupply), wallet.Address, config.EthNode, config.EthKey)
 	log.Printf("Contract pending deploy: 0x%x\n", projectAddress)
 
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
@@ -190,7 +190,7 @@ func (con Connection) getProjectBalances(c *gin.Context) {
 	}
 	maintainerBalance, maintainerReserved, investorBalance, _ := contract.ListBalances(nil)
 
-	if (maintainerBalance != nil && maintainerReserved != nil && investorBalance != nil) {
+	if maintainerBalance != nil && maintainerReserved != nil && investorBalance != nil {
 		maintainerBalance = new(big.Int).Div(maintainerBalance, big.NewInt(ONE_TOKEN))
 		maintainerReserved = new(big.Int).Div(maintainerReserved, big.NewInt(ONE_TOKEN))
 		investorBalance = new(big.Int).Div(investorBalance, big.NewInt(ONE_TOKEN))
@@ -198,7 +198,7 @@ func (con Connection) getProjectBalances(c *gin.Context) {
 
 	// Get Token balance for current user
 	c.IndentedJSON(http.StatusFound, gin.H{
-		"maintainer_balance": maintainerBalance,
+		"maintainer_balance":  maintainerBalance,
 		"maintainer_reserved": maintainerReserved,
 		"investor_balance":    investorBalance,
 	})

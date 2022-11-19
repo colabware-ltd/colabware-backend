@@ -24,14 +24,14 @@ var config Config
 var err error
 
 type Connection struct {
-	Projects        *mongo.Collection
-	Requests        *mongo.Collection
-	Contributions   *mongo.Collection
-	Proposals       *mongo.Collection
-	Users           *mongo.Collection
-	Wallets         *mongo.Collection
-	TokenPayments   *mongo.Collection
-	TokenEventLogs  *mongo.Collection
+	Projects       *mongo.Collection
+	Requests       *mongo.Collection
+	Contributions  *mongo.Collection
+	Proposals      *mongo.Collection
+	Users          *mongo.Collection
+	Wallets        *mongo.Collection
+	TokenPayments  *mongo.Collection
+	TokenEventLogs *mongo.Collection
 }
 
 func initDB() *mongo.Client {
@@ -76,20 +76,20 @@ func main() {
 	dbClient := initDB()
 	defer dbClient.Disconnect(context.Background())
 	dbConn := Connection{
-		Projects:         dbClient.Database("colabware").Collection("projects"),
-		Requests:         dbClient.Database("colabware").Collection("requests"),
-		Contributions:    dbClient.Database("colabware").Collection("contributions"),
-		Proposals:        dbClient.Database("colabware").Collection("proposals"),
-		Users:            dbClient.Database("colabware").Collection("users"),
-		Wallets:          dbClient.Database("colabware").Collection("wallets"),
-		TokenPayments:    dbClient.Database("colabware").Collection("token_payments"),
-		TokenEventLogs:   dbClient.Database("colabware").Collection("token_event_logs"),
+		Projects:       dbClient.Database("colabware").Collection("projects"),
+		Requests:       dbClient.Database("colabware").Collection("requests"),
+		Contributions:  dbClient.Database("colabware").Collection("contributions"),
+		Proposals:      dbClient.Database("colabware").Collection("proposals"),
+		Users:          dbClient.Database("colabware").Collection("users"),
+		Wallets:        dbClient.Database("colabware").Collection("wallets"),
+		TokenPayments:  dbClient.Database("colabware").Collection("token_payments"),
+		TokenEventLogs: dbClient.Database("colabware").Collection("token_event_logs"),
 	}
 
 	// Set API key for Stripe
 	// Start payment processors
 	//c := make(chan string)
-	// go dbConn.tokenPaymentProcessor()
+	go dbConn.tokenPaymentProcessor()
 
 	stripe.Key = config.StripeKey
 
@@ -102,7 +102,7 @@ func main() {
 	// Open WebSocket connection with Ethereum node
 	ethClientWSS, err = ethclient.Dial(config.EthNodeWSS)
 	if err != nil {
-	  log.Fatal(err)
+		log.Fatal(err)
 	}
 	dbConn.getTokenAddresses()
 
@@ -112,7 +112,7 @@ func main() {
 	}
 	ethSub, err = ethClientWSS.SubscribeFilterLogs(context.Background(), ethSubQuery, ethLogs)
 	if err != nil {
-  		log.Fatal(err)
+		log.Fatal(err)
 	}
 
 	// Start deployment monitor subroutine
@@ -121,7 +121,7 @@ func main() {
 	// Start Eth logger subrouting
 	go dbConn.ethLogger()
 
-  log.Println("Finished initializing! Ready to rock :D")
+	log.Println("Finished initializing! Ready to rock :D")
 
 	// Start serving the application
 	err = router.Run("localhost:9998")
