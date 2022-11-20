@@ -14,8 +14,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, maintainerSupply big.Int, walletAddress string, ethNode string, key string) common.Address {
-	// Connect to an ethereum node hosted by Infura
+func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, maintainerSupply big.Int, walletAddress string, ethNode string, key string, chain int64) common.Address {
+	// Connect to an ethereum node
 	client, err := ethclient.Dial(ethNode)
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
@@ -44,7 +44,7 @@ func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, ma
 		log.Fatal(err)
 	}
 
-	chainId := big.NewInt(5) // Goerli Chain ID
+	chainId := big.NewInt(chain) // Goerli Chain ID
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainId)
 	if err != nil {
 		log.Fatal(err)
@@ -56,7 +56,7 @@ func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, ma
 	// 3,628,241 unit burnt for contract creation and 10 tokens minted
 	// 3,628,301 unit burnt for contract creation and 100 tokens minted
 	// The contract creation alone with 10 token costed 635,471 units
-	auth.GasLimit = uint64(6000000) // in units
+	// auth.GasLimit = uint64(6000000) // in units
 	auth.GasPrice = gasPrice
 
 	address, transaction, _, err := contracts.DeployProject(
@@ -68,6 +68,7 @@ func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, ma
 		&maintainerSupply,
 		common.HexToAddress(walletAddress),
 	)
+
 	if err != nil {
 		log.Fatalf("Unable to deploy: %v\nTransaction: %v", err, transaction)
 	}

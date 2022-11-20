@@ -103,7 +103,7 @@ func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64) error 
 	}
 
 	// connect to an ethereum node  hosted by infura
-	client, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	client, err := ethclient.Dial(config.EthNode)
 	if err != nil {
 		return fmt.Errorf("Unable to connect to network:%v\n", err)
 	}
@@ -158,7 +158,7 @@ func (con Connection) transferETH(r TransferETHRequest) error {
 	}
 
 	// connect to an ethereum node  hosted by infura
-	client, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	client, err := ethclient.Dial(config.EthNode)
 
 	if err != nil {
 		return fmt.Errorf("Unable to connect to network:%v\n", err)
@@ -221,7 +221,7 @@ func (con Connection) transferTest(c *gin.Context) {
 
 func (con Connection) transferTokenFromProjectToWallet(projectWallet primitive.ObjectID, toWallet primitive.ObjectID, amount float64, projectAddr common.Address) error {
 	// connect to an ethereum node  hosted by infura
-	blockchain, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	blockchain, err := ethclient.Dial(config.EthNode)
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 	}
@@ -278,7 +278,7 @@ func (con Connection) transferToken(r TransferTokenRequest) error {
 	}
 
 	// connect to an ethereum node  hosted by infura
-	blockchain, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	blockchain, err := ethclient.Dial(config.EthNode)
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 	}
@@ -471,7 +471,7 @@ func (con Connection) getBalance(c *gin.Context) {
 
 func readBalance(project string, wallet string) *big.Int {
 	// Connect to ETH node hosted by Infura
-	client, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	client, err := ethclient.Dial(config.EthNode)
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 		return big.NewInt(-1)
