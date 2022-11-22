@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/sirupsen/logrus"
@@ -32,6 +31,7 @@ type Connection struct {
 	Wallets         *mongo.Collection
 	TokenPayments   *mongo.Collection
 	TokenEventLogs  *mongo.Collection
+	TokenHoldings   *mongo.Collection
 }
 
 func initDB() *mongo.Client {
@@ -84,6 +84,7 @@ func main() {
 		Wallets:          dbClient.Database("colabware").Collection("wallets"),
 		TokenPayments:    dbClient.Database("colabware").Collection("token_payments"),
 		TokenEventLogs:   dbClient.Database("colabware").Collection("token_event_logs"),
+		TokenHoldings:    dbClient.Database("colabware").Collection("token_holdings"),
 	}
 
 	// Set API key for Stripe
@@ -102,23 +103,16 @@ func main() {
 	// Open WebSocket connection with Ethereum node
 	ethClientWSS, err = ethclient.Dial(config.EthNodeWSS)
 	if err != nil {
-	  log.Fatal(err)
+		log.Fatal(err)
 	}
-	dbConn.getTokenAddresses()
-
 	ethLogs = make(chan types.Log)
-	ethSubQuery = ethereum.FilterQuery{
-		Addresses: ethTokenAddresses,
-	}
-	ethSub, err = ethClientWSS.SubscribeFilterLogs(context.Background(), ethSubQuery, ethLogs)
-	if err != nil {
-  		log.Fatal(err)
-	}
+	dbConn.getTokenAddresses()
 
 	// Start deployment monitor subroutine
 	go dbConn.ethDeploymentMonitor()
 
 	// Start Eth logger subrouting
+	// TODO: Ensure that list of existing projects is updated for sub query
 	go dbConn.ethLogger()
 
   log.Println("Finished initializing! Ready to rock :D")
