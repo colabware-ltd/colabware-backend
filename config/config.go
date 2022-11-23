@@ -1,4 +1,4 @@
-package main
+package config
 
 import "github.com/spf13/viper"
 
@@ -32,3 +32,7 @@ func LoadConfig(path string) (config Config, err error) {
 	err = viper.Unmarshal(&config)
 	return
 }
+
+// ETH_NODE=https://polygon-mumbai.g.alchemy.com/v2/hIpnTe7q_QE-JQGkyuxdkpC9HQABLn9l
+// ETH_KEY=5e07055cc82d4df284f65da9296e5ec46010fc2b0061f68d4439a01f09ecbb95
+// ETH_CHAIN_ID=80001

@@ -27,12 +27,12 @@ func (con Connection) ethDeploymentMonitor() {
 			// Append addresses as common.Address
 			projectAddress, ok := p.(string)
 			if ok {
-				client, err := ethclient.Dial(config.EthNode)
+				client, err := ethclient.Dial(colabwareConf.EthNode)
 				if err != nil {
 					log.Fatalf("Unable to connect to network:%v\n", err)
 					return
 				}
-			
+
 				contract, err := contracts.NewProjectCaller(common.HexToAddress(projectAddress), client)
 				if err != nil {
 					log.Fatalf("Unable to create contract binding:%v\n", err)
@@ -55,10 +55,10 @@ func (con Connection) ethDeploymentMonitor() {
 						log.Fatal(err)
 					}
 
-					selector = bson.M{ "address": projectAddress }
+					selector = bson.M{"address": projectAddress}
 					update := bson.M{
 						"$set": bson.M{
-							"status": "deployed",
+							"status":        "deployed",
 							"token.address": tokenAddress.Hex(),
 						},
 					}

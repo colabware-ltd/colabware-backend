@@ -29,6 +29,7 @@ import (
 const ONE_TOKEN = 1000000000000000000
 
 type Wallet struct {
+	ID         primitive.ObjectID `bson:"_id" json:"_id"`
 	Owner      primitive.ObjectID `json:"owner"`
 	PrivateKey string             `json:"privateKey"`
 	PublicKey  string             `json:"publicKey"`
@@ -96,28 +97,28 @@ func (con Connection) transferBetweenWallets(r TransferBetweenWalletsRequest) er
 	return con.transferETH(transferRequest)
 }
 
-func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64) error {
+func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64) (common.Hash, error) {
 	wallet := con.getWalletFromID(w)
 	if wallet == nil {
-		return fmt.Errorf("Wallet not found")
+		return *new(common.Hash), fmt.Errorf("Wallet not found")
 	}
 
 	// connect to an ethereum node  hosted by infura
 	client, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
 	if err != nil {
-		return fmt.Errorf("Unable to connect to network:%v\n", err)
+		return *new(common.Hash), fmt.Errorf("Unable to connect to network:%v\n", err)
 	}
 
 	// Declan's wallet with tons of ETH (supposedly)
-	nonce, err := client.PendingNonceAt(context.Background(), common.HexToAddress(config.EthAddr))
+	nonce, err := client.PendingNonceAt(context.Background(), common.HexToAddress(colabwareConf.EthAddr))
 	if err != nil {
-		return err
+		return *new(common.Hash), err
 	}
 
 	gasLimit := uint64(21000)
 	gasPrice, err := client.SuggestGasPrice(context.Background())
 	if err != nil {
-		return err
+		return *new(common.Hash), err
 	}
 
 	toAddress := common.HexToAddress(wallet.Address)
@@ -125,29 +126,29 @@ func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64) error 
 	val := new(big.Float).SetFloat64(a)
 	tx := types.NewTransaction(nonce, toAddress, etherToWei(val), gasLimit, gasPrice, data)
 
-	privateKeyByte, err := hexutil.Decode("0x" + config.EthKey)
+	privateKeyByte, err := hexutil.Decode("0x" + colabwareConf.EthKey)
 	if err != nil {
-		return err
+		return *new(common.Hash), err
 	}
 
 	privateKey, err := crypto.ToECDSA(privateKeyByte)
 	if err != nil {
-		return err
+		return *new(common.Hash), err
 	}
 
 	signedTx, err := types.SignTx(tx, types.HomesteadSigner{}, privateKey)
 	if err != nil {
-		return err
+		return *new(common.Hash), err
 	}
 
 	// TODO: Convert to interface to handle user transactions.
 	err = client.SendTransaction(context.Background(), signedTx)
 	if err != nil {
-		return err
+		return *new(common.Hash), err
 	}
 
-	log.Printf("tx sent: %s\n", signedTx.Hash().Hex())
-	return nil
+	log.Debugf("tx sent: %s\n", signedTx.Hash())
+	return signedTx.Hash(), nil
 
 }
 
@@ -201,7 +202,7 @@ func (con Connection) transferETH(r TransferETHRequest) error {
 		return err
 	}
 
-	log.Printf("tx sent: %s\n", signedTx.Hash().Hex())
+	log.Debugf("tx sent: %s\n", signedTx.Hash().Hex())
 	return nil
 }
 
@@ -214,12 +215,11 @@ func (con Connection) transferTest(c *gin.Context) {
 
 	projectWallet, _ := primitive.ObjectIDFromHex(t.ProjectWallet)
 	toWallet, _ := primitive.ObjectIDFromHex(t.ToWallet)
-	
+
 	con.transferTokenFromProjectToWallet(projectWallet, toWallet, t.Amount, common.HexToAddress(t.ProjectAddress))
 }
 
-
-func (con Connection) transferTokenFromProjectToWallet(projectWallet primitive.ObjectID, toWallet primitive.ObjectID, amount float64, projectAddr common.Address) error {
+func (con Connection) transferTokenFromProjectToWallet(projectWallet primitive.ObjectID, toWallet primitive.ObjectID, amount float64, projectAddr common.Address) (common.Hash, error) {
 	// connect to an ethereum node  hosted by infura
 	blockchain, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
 	if err != nil {
@@ -241,12 +241,42 @@ func (con Connection) transferTokenFromProjectToWallet(projectWallet primitive.O
 		TokenAddress: tokenAddr,
 	}
 
-	err = con.transferToken(transferRequest)
+	tx, err := con.transferToken(transferRequest)
 	if err != nil {
-		return nil
+		return *new(common.Hash), nil
 	}
 
-	return err
+	return tx, err
+}
+
+func (con Connection) transferTokenFromWalletToProject(projectWallet primitive.ObjectID, fromWallet primitive.ObjectID, amount float64, projectAddr common.Address) (common.Hash, error) {
+	// connect to an ethereum node  hosted by infura
+	blockchain, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	if err != nil {
+		log.Fatalf("Unable to connect to network:%v\n", err)
+	}
+
+	// bind to the project that created the token
+	project, err := contracts.NewProject(projectAddr, blockchain)
+	if err != nil {
+		log.Fatalf("Unable to bind to deployed instance of contract:%v\n", err)
+	}
+
+	tokenAddr, err := project.GetTokenAddress(&bind.CallOpts{})
+
+	transferRequest := TransferTokenRequest{
+		FromWallet:   fromWallet,
+		ToWallet:     projectWallet,
+		Amount:       amount,
+		TokenAddress: tokenAddr,
+	}
+
+	hash, err := con.transferToken(transferRequest)
+	if err != nil {
+		return *new(common.Hash), nil
+	}
+
+	return hash, err
 }
 
 func floatToBigInt(val float64) *big.Int {
@@ -266,15 +296,15 @@ func floatToBigInt(val float64) *big.Int {
 	return result
 }
 
-func (con Connection) transferToken(r TransferTokenRequest) error {
+func (con Connection) transferToken(r TransferTokenRequest) (common.Hash, error) {
 	fromWallet := con.getWalletFromID(r.FromWallet)
 	if fromWallet == nil {
-		return fmt.Errorf("Wallet not found")
+		return *new(common.Hash), fmt.Errorf("Wallet not found")
 	}
 
 	toWallet := con.getWalletFromID(r.ToWallet)
 	if toWallet == nil {
-		return fmt.Errorf("Wallet not found")
+		return *new(common.Hash), fmt.Errorf("Wallet not found")
 	}
 
 	// connect to an ethereum node  hosted by infura
@@ -285,19 +315,19 @@ func (con Connection) transferToken(r TransferTokenRequest) error {
 
 	nonce, err := blockchain.PendingNonceAt(context.Background(), common.HexToAddress(fromWallet.Address))
 	if err != nil {
-		return err
+		return *new(common.Hash), err
 	}
 
 	toAddress := common.HexToAddress(toWallet.Address)
 
 	privateKeyByte, err := hexutil.Decode("0x" + fromWallet.PrivateKey)
 	if err != nil {
-		return err
+		return *new(common.Hash), err
 	}
 
 	privateKey, err := crypto.ToECDSA(privateKeyByte)
 	if err != nil {
-		return err
+		return *new(common.Hash), err
 	}
 
 	value := big.NewInt(0) // in wei (0 eth)
@@ -327,36 +357,36 @@ func (con Connection) transferToken(r TransferTokenRequest) error {
 	// 	return err
 	// }
 	// fmt.Println(gasLimit)
-	gasLimit := uint64(84000)
+	gasLimit := uint64(200000)
 	gasPrice, err := blockchain.SuggestGasPrice(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Printf("Token Address: %v\n", r.TokenAddress)
+	log.Debugf("Token Address: %v\n", r.TokenAddress)
 	tx := types.NewTransaction(nonce, r.TokenAddress, value, gasLimit, gasPrice, data)
 
 	chainID, err := blockchain.NetworkID(context.Background())
 	if err != nil {
 		log.Fatal(err)
-		return err
+		return *new(common.Hash), err
 	}
 
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
 	if err != nil {
 		log.Fatal(err)
-		return err
+		return *new(common.Hash), err
 	}
 
 	err = blockchain.SendTransaction(context.Background(), signedTx)
 	if err != nil {
 		log.Fatal(err)
-		return err
+		return *new(common.Hash), err
 	}
 
 	fmt.Printf("tx sent: %s\n", signedTx.Hash().Hex())
 
-	return nil
+	return signedTx.Hash(), nil
 }
 
 func (con Connection) createWallet(owner primitive.ObjectID) (primitive.ObjectID, Wallet) {
@@ -387,6 +417,7 @@ func (con Connection) createWallet(owner primitive.ObjectID) (primitive.ObjectID
 	log.Println(address)
 
 	w := Wallet{
+		ID:         primitive.NewObjectID(),
 		Owner:      owner,
 		PrivateKey: privateKeyHex,
 		PublicKey:  publicKeyHex,
@@ -461,6 +492,23 @@ func (con Connection) getWalletFromID(id primitive.ObjectID) *Wallet {
 
 	log.Printf("Wallet found with address %s", wallet.Address)
 	return wallet
+}
+
+func (con Connection) getWalletIDFromAddr(addr string) (*primitive.ObjectID, error) {
+	var wallet *Wallet
+	result := con.Wallets.FindOne(context.TODO(), bson.M{"address": addr})
+
+	if result == nil {
+		return nil, fmt.Errorf("Requested wallet for Address: %s not found", addr)
+	}
+
+	err := result.Decode(&wallet)
+	if err != nil {
+		return nil, fmt.Errorf("Error decoding wallet for Address: %s due to %v", addr, err)
+	}
+
+	log.Printf("Wallet ID found: %s", wallet.ID)
+	return &wallet.ID, nil
 }
 
 func (con Connection) getBalance(c *gin.Context) {

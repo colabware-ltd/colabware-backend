@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	colabConf "github.com/colabware-ltd/colabware-backend/config"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -20,7 +21,7 @@ import (
 
 var router *gin.Engine
 var store = cookie.NewStore([]byte("secret"))
-var config Config
+var colabwareConf colabConf.Config
 var err error
 
 type Connection struct {
@@ -37,10 +38,10 @@ type Connection struct {
 func initDB() *mongo.Client {
 	// Connect to the database
 	credential := options.Credential{
-		Username: config.DBUser,
-		Password: config.DBPass,
+		Username: colabwareConf.DBUser,
+		Password: colabwareConf.DBPass,
 	}
-	client, err := mongo.NewClient(options.Client().ApplyURI(config.DBAddr).SetAuth(credential))
+	client, err := mongo.NewClient(options.Client().ApplyURI(colabwareConf.DBAddr).SetAuth(credential))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -58,9 +59,10 @@ func initDB() *mongo.Client {
 }
 
 func main() {
+	log.SetLevel(log.DebugLevel)
 	log.SetReportCaller(true)
 
-	config, err = LoadConfig(".")
+	colabwareConf, err = colabConf.LoadConfig(".")
 	if err != nil {
 		log.Fatal("cannot load config:", err)
 	}
@@ -91,7 +93,7 @@ func main() {
 	//c := make(chan string)
 	go dbConn.tokenPaymentProcessor()
 
-	stripe.Key = config.StripeKey
+	stripe.Key = colabwareConf.StripeKey
 
 	// Initialize GitHub auth
 	initAuth()
@@ -100,7 +102,7 @@ func main() {
 	initializeRoutes(dbConn)
 
 	// Open WebSocket connection with Ethereum node
-	ethClientWSS, err = ethclient.Dial(config.EthNodeWSS)
+	ethClientWSS, err = ethclient.Dial(colabwareConf.EthNodeWSS)
 	if err != nil {
 		log.Fatal(err)
 	}

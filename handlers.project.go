@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -42,8 +43,8 @@ type Token struct {
 	Address          string  `json:"address" bson:"address,omitempty"`
 	Symbol           string  `json:"symbol"`
 	Price            float32 `json:"price"`
-	TotalSupply      int64   `json:"totalSupply"`
-	MaintainerSupply int64   `json:"maintainerSupply"`
+	TotalSupply      int64   `json:"total_supply"`
+	MaintainerSupply int64   `json:"maintainer_supply"`
 }
 
 type GitHub struct {
@@ -104,7 +105,7 @@ func (con Connection) postProject(c *gin.Context) {
 	walletId, wallet := con.createWallet(result.InsertedID.(primitive.ObjectID))
 
 	// Deploy contract and store address; wait for execution to complete
-	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, *p.Token.getBigTotalSupply(), *big.NewInt(p.Token.MaintainerSupply), wallet.Address, config.EthNode, config.EthKey)
+	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, *p.Token.getBigTotalSupply(), *big.NewInt(p.Token.MaintainerSupply), wallet.Address, colabwareConf.EthNode, colabwareConf.EthKey)
 	log.Printf("Contract pending deploy: 0x%x\n", projectAddress)
 
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
@@ -125,9 +126,7 @@ func (con Connection) postProject(c *gin.Context) {
 
 func (con Connection) getProject(c *gin.Context) {
 	name := c.Param("project")
-	var project Project
-	selector := bson.M{"name": name}
-	err := con.Projects.FindOne(context.TODO(), selector).Decode(&project)
+	project, err := con.getProjectByName(name)
 	if err != nil {
 		log.Printf("%v", err)
 		c.IndentedJSON(http.StatusInternalServerError, nil)
@@ -138,6 +137,7 @@ func (con Connection) getProject(c *gin.Context) {
 	if sessions.Default(c).Get("user-id") != nil {
 		var resTarget []GitHubFork
 		res, err := client.Get("https://api.github.com/repos/" + project.GitHub.RepoOwner + "/" + project.GitHub.RepoName + "/forks")
+
 		if err != nil {
 			log.Printf("%v", err)
 			return
@@ -151,6 +151,26 @@ func (con Connection) getProject(c *gin.Context) {
 		project.GitHub.Forks = resTarget
 	}
 	c.IndentedJSON(http.StatusFound, project)
+}
+
+func (con Connection) getProjectByName(name string) (*Project, error) {
+	var project Project
+	selector := bson.M{"name": name}
+	err := con.Projects.FindOne(context.TODO(), selector).Decode(&project)
+	if err != nil {
+		return nil, fmt.Errorf("%v", err)
+	}
+	return &project, nil
+}
+
+func (con Connection) getProjectByWalletID(id primitive.ObjectID) (*Project, error) {
+	var project Project
+	selector := bson.M{"wallet": id}
+	err := con.Projects.FindOne(context.TODO(), selector).Decode(&project)
+	if err != nil {
+		return nil, fmt.Errorf("%v", err)
+	}
+	return &project, nil
 }
 
 func getProjectBranches(c *gin.Context) {
@@ -177,7 +197,7 @@ func getProjectBranches(c *gin.Context) {
 func (con Connection) getProjectBalances(c *gin.Context) {
 	project := c.Param("project")
 
-	client, err := ethclient.Dial(config.EthNode)
+	client, err := ethclient.Dial(colabwareConf.EthNode)
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 		return
