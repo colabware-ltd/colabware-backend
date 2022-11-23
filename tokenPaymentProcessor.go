@@ -135,12 +135,12 @@ func (con Connection) processPayment(r TokenPaymentRequest) error {
 		Amount:       r.BuyerAmount,
 		TokenAddress: common.HexToAddress("0x5248dDdC7857987A2EfD81522AFBA1fCb017A4b7"),
 	}
-	_, err := con.transferToken(sendMoneyToProject)
+	_, err := con.transferToken(sendMoneyToProject, 0)
 	if err != nil {
 		return err
 	}
 
-	_, err = con.transferTokenFromProjectToWallet(r.SellerWallet, r.BuyerWallet, r.SellerAmount, common.HexToAddress(r.ProjectAddr))
+	_, err = con.transferTokenFromProjectToWallet(r.SellerWallet, r.BuyerWallet, r.SellerAmount, common.HexToAddress(r.ProjectAddr), 0)
 	if err != nil {
 		return err
 	}

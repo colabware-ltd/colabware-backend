@@ -97,7 +97,14 @@ func (con Connection) transferBetweenWallets(r TransferBetweenWalletsRequest) er
 	return con.transferETH(transferRequest)
 }
 
-func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64) (common.Hash, error) {
+func maxInt(x, y uint64) uint64 {
+	if x < y {
+		return y
+	}
+	return x
+}
+
+func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64, n uint64) (common.Hash, error) {
 	wallet := con.getWalletFromID(w)
 	if wallet == nil {
 		return *new(common.Hash), fmt.Errorf("Wallet not found")
@@ -114,6 +121,7 @@ func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64) (commo
 	if err != nil {
 		return *new(common.Hash), err
 	}
+	nonce = maxInt(nonce, n)
 
 	gasLimit := uint64(21000)
 	gasPrice, err := client.SuggestGasPrice(context.Background())
@@ -216,10 +224,10 @@ func (con Connection) transferTest(c *gin.Context) {
 	projectWallet, _ := primitive.ObjectIDFromHex(t.ProjectWallet)
 	toWallet, _ := primitive.ObjectIDFromHex(t.ToWallet)
 
-	con.transferTokenFromProjectToWallet(projectWallet, toWallet, t.Amount, common.HexToAddress(t.ProjectAddress))
+	con.transferTokenFromProjectToWallet(projectWallet, toWallet, t.Amount, common.HexToAddress(t.ProjectAddress), 0)
 }
 
-func (con Connection) transferTokenFromProjectToWallet(projectWallet primitive.ObjectID, toWallet primitive.ObjectID, amount float64, projectAddr common.Address) (common.Hash, error) {
+func (con Connection) transferTokenFromProjectToWallet(projectWallet primitive.ObjectID, toWallet primitive.ObjectID, amount float64, projectAddr common.Address, n uint64) (common.Hash, error) {
 	// connect to an ethereum node  hosted by infura
 	blockchain, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
 	if err != nil {
@@ -241,7 +249,7 @@ func (con Connection) transferTokenFromProjectToWallet(projectWallet primitive.O
 		TokenAddress: tokenAddr,
 	}
 
-	tx, err := con.transferToken(transferRequest)
+	tx, err := con.transferToken(transferRequest, n)
 	if err != nil {
 		return *new(common.Hash), nil
 	}
@@ -271,7 +279,7 @@ func (con Connection) transferTokenFromWalletToProject(projectWallet primitive.O
 		TokenAddress: tokenAddr,
 	}
 
-	hash, err := con.transferToken(transferRequest)
+	hash, err := con.transferToken(transferRequest, 0)
 	if err != nil {
 		return *new(common.Hash), nil
 	}
@@ -296,7 +304,7 @@ func floatToBigInt(val float64) *big.Int {
 	return result
 }
 
-func (con Connection) transferToken(r TransferTokenRequest) (common.Hash, error) {
+func (con Connection) transferToken(r TransferTokenRequest, n uint64) (common.Hash, error) {
 	fromWallet := con.getWalletFromID(r.FromWallet)
 	if fromWallet == nil {
 		return *new(common.Hash), fmt.Errorf("Wallet not found")
@@ -317,6 +325,7 @@ func (con Connection) transferToken(r TransferTokenRequest) (common.Hash, error)
 	if err != nil {
 		return *new(common.Hash), err
 	}
+	nonce = maxInt(nonce, n)
 
 	toAddress := common.HexToAddress(toWallet.Address)
 

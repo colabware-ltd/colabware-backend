@@ -139,37 +139,49 @@ func (con Connection) purchaseToken(c *gin.Context) {
 }
 
 func (con Connection) startTokenPurchaseWorkFlow(r TokenPurchaseTransactionRecord) {
+
+	// connect to an ethereum node  hosted by infura
+	client, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	if err != nil {
+		log.Printf("Unable to connect to network:%v\n", err)
+		return
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go con.waitRampFinish(r, &wg)
 	wg.Wait()
 
 	// Cannot do these in parallel (yet) because you are connecting to the same Infura, which cause the later transaction to overwrite the first.
+	nonce, err := client.PendingNonceAt(context.Background(), common.HexToAddress(colabwareConf.EthAddr))
+	if err != nil {
+		log.Printf("Unable to get nonce:%v\n", err)
+		return
+	}
+
+	wg.Add(2)
 
 	// Supply User wallet with ETH
-	wg.Add(1)
-	go con.waitSupplyETHForWallet(r.UserWalletID, r.ETHReadyUser.Amount, r.ID, "eth_ready_user", &wg)
+	go con.waitSupplyETHForWallet(r.UserWalletID, r.ETHReadyUser.Amount, r.ID, "eth_ready_user", &wg, nonce)
+
+	// Supply Project wallet with ETH
+	go con.waitSupplyETHForWallet(r.ProjectWalletID, r.ETHReadyProject.Amount, r.ID, "eth_ready_project", &wg, nonce+1)
+
 	wg.Wait()
 
-	// // Supply Project wallet with ETH
-	wg.Add(1)
-	go con.waitSupplyETHForWallet(r.ProjectWalletID, r.ETHReadyProject.Amount, r.ID, "eth_ready_project", &wg)
-	wg.Wait()
-
+	wg.Add(2)
 	// Send Money to Project Wallet
-	wg.Add(1)
-	go con.waitTransferMoneyToProjectWallet(r, &wg)
-	wg.Wait()
+	go con.waitTransferMoneyToProjectWallet(r, &wg, 0)
 
 	// Release Project Tokens for the user
-	wg.Add(1)
-	go con.waitTransferTokenToUserWallet(r, &wg)
+	go con.waitTransferTokenToUserWallet(r, &wg, 0)
+
 	wg.Wait()
 
 	log.Debugf("Token Purchase Flow completed, transcation ID for Mongo Lookup: %v", r.ID)
 }
 
-func (con Connection) waitTransferMoneyToProjectWallet(r TokenPurchaseTransactionRecord, wg *sync.WaitGroup) {
+func (con Connection) waitTransferMoneyToProjectWallet(r TokenPurchaseTransactionRecord, wg *sync.WaitGroup, n uint64) {
 	transferRequest := TransferTokenRequest{
 		FromWallet: r.UserWalletID,
 		ToWallet:   r.ProjectWalletID,
@@ -178,7 +190,7 @@ func (con Connection) waitTransferMoneyToProjectWallet(r TokenPurchaseTransactio
 		TokenAddress: common.HexToAddress("0x5248dDdC7857987A2EfD81522AFBA1fCb017A4b7"),
 	}
 
-	hash, err := con.transferToken(transferRequest)
+	hash, err := con.transferToken(transferRequest, n)
 	if err != nil {
 		log.Printf("Error transfer money to project wallet. Trans ID: %v. Err: %v\n", r.ID, err)
 		return
@@ -195,14 +207,14 @@ func (con Connection) waitTransferMoneyToProjectWallet(r TokenPurchaseTransactio
 	wg.Done()
 }
 
-func (con Connection) waitTransferTokenToUserWallet(r TokenPurchaseTransactionRecord, wg *sync.WaitGroup) {
+func (con Connection) waitTransferTokenToUserWallet(r TokenPurchaseTransactionRecord, wg *sync.WaitGroup, n uint64) {
 	p, err := con.getProjectByWalletID(r.ProjectWalletID)
 	if err != nil {
 		log.Printf("Error find project from Wallet ID: %v", err)
 		return
 	}
 
-	hash, err := con.transferTokenFromProjectToWallet(r.ProjectWalletID, r.UserWalletID, r.TokenOut.Amount, common.HexToAddress(p.Address))
+	hash, err := con.transferTokenFromProjectToWallet(r.ProjectWalletID, r.UserWalletID, r.TokenOut.Amount, common.HexToAddress(p.Address), n)
 	if err != nil {
 		log.Printf("Error transfering token to user wallet: %v", err)
 		return
@@ -219,9 +231,9 @@ func (con Connection) waitTransferTokenToUserWallet(r TokenPurchaseTransactionRe
 	wg.Done()
 }
 
-func (con Connection) waitSupplyETHForWallet(w primitive.ObjectID, a float64, record primitive.ObjectID, flag string, wg *sync.WaitGroup) {
+func (con Connection) waitSupplyETHForWallet(w primitive.ObjectID, a float64, record primitive.ObjectID, flag string, wg *sync.WaitGroup, n uint64) {
 	log.Debugf("waitSupplyETHForWallet started for wallet: %v\n", w)
-	hash, err := con.supplyETHForWallet(w, a)
+	hash, err := con.supplyETHForWallet(w, a, n)
 	if err != nil {
 		log.Printf("Failed to supply ETH for user wallet: %v\n", err)
 	}
@@ -245,7 +257,13 @@ func waitForTransaction(h common.Hash) *types.Transaction {
 	}
 
 	for {
-		tx, pending, _ := c.TransactionByHash(context.Background(), h)
+		time.Sleep(5 * time.Second)
+
+		tx, pending, err := c.TransactionByHash(context.Background(), h)
+		if err != nil {
+			log.Errorf("Unable to wait for transaction: %v\n", err)
+			return nil
+		}
 
 		log.Debugf("Is transaction %v pending: %v", h, pending)
 		if !pending {
@@ -253,7 +271,6 @@ func waitForTransaction(h common.Hash) *types.Transaction {
 			return tx
 		}
 
-		time.Sleep(5 * time.Second)
 	}
 
 }
