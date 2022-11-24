@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
@@ -14,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var ethTokenAddresses []common.Address
@@ -21,6 +23,12 @@ var ethSub ethereum.Subscription
 var ethClientWSS *ethclient.Client
 var ethLogs chan types.Log
 var ethSubQuery ethereum.FilterQuery
+
+type TokenHolding struct {
+	WalletAddress string `json:"wallet_address"`
+	TokenAddress  string `json:"token_address"`
+	Balance       uint64 `json:"balance"`
+} 
 
 func (con Connection) getTokenAddresses() {
 	// Add random address for subscription query filter
@@ -37,6 +45,42 @@ func (con Connection) getTokenAddresses() {
 		if ok {
 			ethTokenAddresses = append(ethTokenAddresses, common.HexToAddress(address))
 		}
+	}
+	ethSubQuery = ethereum.FilterQuery{
+		Addresses: ethTokenAddresses,
+	}
+	ethSub, err = ethClientWSS.SubscribeFilterLogs(context.Background(), ethSubQuery, ethLogs)
+	if err != nil {
+  		log.Fatal(err)
+	}
+}
+
+func (con Connection) updateTokenHoldings(tokenAddress string, fromAddress string, toAddress string, amount int64) {
+	opts := options.FindOneAndUpdate().SetUpsert(true)
+
+	toSelector := bson.M{
+		"wallet_address": toAddress,
+		"token_address": tokenAddress,
+	}
+	toUpdate := bson.M{ 
+		"$inc": bson.M{
+			"balance": amount,
+		},
+	}
+	con.TokenHoldings.FindOneAndUpdate(context.TODO(), toSelector, toUpdate, opts)
+
+	// TODO: Check tokenAddress is being passed correctly
+	if (fromAddress != NULL_ADDRESS) {
+		fromSelector := bson.M{
+			"wallet_address": fromAddress,
+			"token_address": tokenAddress,
+		}
+		fromUpdate := bson.M{ 
+			"$inc": bson.M{
+				"balance": -amount,
+			},
+		}
+		con.TokenHoldings.FindOneAndUpdate(context.TODO(), fromSelector, fromUpdate)
 	}
 }
 
@@ -72,15 +116,25 @@ func (con Connection) ethLogger() {
 					
 					transferEvent.From = common.HexToAddress(vLog.Topics[1].Hex())
 					transferEvent.To = common.HexToAddress(vLog.Topics[2].Hex())
+					
+					tokens := new(big.Int).Div(transferEvent.Value, big.NewInt(ONE_TOKEN)).Int64()
 
 					_, err := con.TokenEventLogs.InsertOne(context.TODO(), bson.M{
 						"from": transferEvent.From.Hex(),
 						"to": transferEvent.To.Hex(),
-						"tokens": transferEvent.Value.String(),
+						"tokens": tokens,
 					})
 					if err != nil {
 						log.Printf("%v", err)
 					}
+
+					// TODO: Update balance information in DB
+					con.updateTokenHoldings(
+						vLog.Address.Hex(),
+						transferEvent.From.Hex(),
+						transferEvent.To.Hex(),
+						tokens,
+					)
 					
 					fmt.Printf("From: %s\n", transferEvent.From.Hex())
 					fmt.Printf("To: %s\n", transferEvent.To.Hex())
@@ -98,14 +152,14 @@ func (con Connection) ethLogger() {
 					approvalEvent.Owner = common.HexToAddress(vLog.Topics[1].Hex())
 					approvalEvent.Spender = common.HexToAddress(vLog.Topics[2].Hex())
 
-					_, err := con.TokenEventLogs.InsertOne(context.TODO(), bson.M{
-						"owner": approvalEvent.Owner.Hex(),
-						"spender": approvalEvent.Spender.Hex(),
-						"tokens": approvalEvent.Value.String(),
-					})
-					if err != nil {
-						log.Printf("%v", err)
-					}
+					// _, err := con.TokenEventLogs.InsertOne(context.TODO(), bson.M{
+					// 	"owner": approvalEvent.Owner.Hex(),
+					// 	"spender": approvalEvent.Spender.Hex(),
+					// 	"tokens": approvalEvent.Value.String(),
+					// })
+					// if err != nil {
+					// 	log.Printf("%v", err)
+					// }
 					
 					fmt.Printf("Token Owner: %s\n", approvalEvent.Owner.Hex())
 					fmt.Printf("Spender: %s\n", approvalEvent.Spender.Hex())

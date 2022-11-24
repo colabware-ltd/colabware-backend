@@ -24,23 +24,29 @@ import (
 // TODO: Create wallet for project upon creation. Maintainers should then
 // be able to access this wallet. Wallet should hold maintainer tokens.
 type Project struct {
-	ID          primitive.ObjectID   `json:"_id,omitempty" bson:"_id,omitempty"`
-	Name        string               `json:"name" bson:"name,omitempty"`
-	GitHub      GitHub               `json:"github" bson:"github,omitempty"`
-	Description string               `json:"description" bson:"description,omitempty"`
-	Categories  []string             `json:"categories" bson:"categories,omitempty"`
-	Maintainers []primitive.ObjectID `json:"maintainers" bson:"maintainers,omitempty"`
-	Token       Token                `json:"token" bson:"token,omitempty"`
-	Address     string               `json:"address" bson:"address,omitempty"`
-	Wallet      primitive.ObjectID   `json:"wallet" bson:"wallet,omitempty"`
-	Requests    []primitive.ObjectID `json:"requests" bson:"requests,omitempty"`
-	Roadmap     []primitive.ObjectID `json:"roadmap" bson:"roadmap,omitempty"`
-	Status      string               `json:"status" bson:"status,omitempty"`
+	ID             primitive.ObjectID   `json:"_id,omitempty" bson:"_id,omitempty"`
+	Name           string               `json:"name" bson:"name,omitempty"`
+	GitHub         GitHub               `json:"github" bson:"github,omitempty"`
+	Description    string               `json:"description" bson:"description,omitempty"`
+	Categories     []string             `json:"categories" bson:"categories,omitempty"`
+	Maintainers    []primitive.ObjectID `json:"maintainers" bson:"maintainers,omitempty"`
+	Token          Token                `json:"token" bson:"token,omitempty"`
+	Address        string               `json:"address" bson:"address,omitempty"`
+	Wallet         primitive.ObjectID   `json:"wallet" bson:"wallet,omitempty"`
+	Requests       []primitive.ObjectID `json:"requests" bson:"requests,omitempty"`
+	Roadmap        []primitive.ObjectID `json:"roadmap" bson:"roadmap,omitempty"`
+	Status         string               `json:"status" bson:"status,omitempty"`
+	ApprovalConfig ApprovalConfig       `json:"approval_config" bson:"approval_config,omitempty"`
+}
+
+type ApprovalConfig struct {
+	TokensRequired     float32 `json:"tokens_required" bson:"tokens_required,omitempty"`
+	MaintainerRequired bool    `json:"maintainer_required" bson:"maintainer_required,omitempty"`
 }
 
 type Token struct {
 	Name             string  `json:"name"`
-	Address          string  `json:"address" bson:"address,omitempty"`
+    Address          string  `json:"address" bson:"address,omitempty"`
 	Symbol           string  `json:"symbol"`
 	Price            float32 `json:"price"`
 	TotalSupply      int64   `json:"total_supply"`
@@ -63,6 +69,11 @@ type GitHubFork struct {
 
 func (t Token) getBigTotalSupply() *big.Int {
 	i := big.NewInt(t.TotalSupply)
+	return i.Mul(i, big.NewInt(ONE_TOKEN))
+}
+
+func (t Token) getBigMaintainerSupply() *big.Int {
+	i := big.NewInt(t.MaintainerSupply)
 	return i.Mul(i, big.NewInt(ONE_TOKEN))
 }
 
@@ -105,7 +116,7 @@ func (con Connection) postProject(c *gin.Context) {
 	walletId, wallet := con.createWallet(result.InsertedID.(primitive.ObjectID))
 
 	// Deploy contract and store address; wait for execution to complete
-	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, *p.Token.getBigTotalSupply(), *big.NewInt(p.Token.MaintainerSupply), wallet.Address, colabwareConf.EthNode, colabwareConf.EthKey)
+	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, *p.Token.getBigTotalSupply(), *p.Token.getBigMaintainerSupply(), wallet.Address, colabwareConf.EthNode, colabwareConf.EthKey, colabwareConf.EthChainId)
 	log.Printf("Contract pending deploy: 0x%x\n", projectAddress)
 
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
@@ -259,4 +270,33 @@ func (con Connection) getProjects(c *gin.Context) {
 		return
 	}
 	c.IndentedJSON(http.StatusFound, gin.H{"total": total, "results": projectsFiltered})
+}
+
+func (con Connection) getTokenHolding(c *gin.Context) {
+	token := c.Param("token")
+	userId := sessions.Default(c).Get("user-id")
+	var user User
+	var tokenHolding TokenHolding
+
+	// Find address of current user
+	err = con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+	selector := bson.M{
+		"token_address": token, 
+		"wallet_address": user.WalletAddress,
+	}
+	err := con.TokenHoldings.FindOne(context.TODO(), selector).Decode(&tokenHolding)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+	
+	c.IndentedJSON(http.StatusFound, gin.H{
+		"wallet_address": user.WalletAddress,
+		"token_address": token,
+		"balance": tokenHolding.Balance,
+	})
 }

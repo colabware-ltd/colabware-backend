@@ -5,8 +5,6 @@ import (
 	"crypto/ecdsa"
 	"math/big"
 
-	colabConf "github.com/colabware-ltd/colabware-backend/config"
-
 	"github.com/colabware-ltd/colabware-backend/contracts"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -15,13 +13,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, maintainerSupply big.Int, walletAddress string, ethNode string, key string) common.Address {
-	config, err := colabConf.LoadConfig("./../")
-	if err != nil {
-		log.Fatal("cannot load config:", err)
-	}
-
-	// Connect to an ethereum node hosted by Infura
+func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, maintainerSupply big.Int, walletAddress string, ethNode string, key string, chain int64) common.Address {
+	// Connect to an ethereum node
 	client, err := ethclient.Dial(ethNode)
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
@@ -50,7 +43,7 @@ func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, ma
 		log.Fatal(err)
 	}
 
-	chainId := big.NewInt(int64(config.EthChainId)) // Goerli Chain ID
+	chainId := big.NewInt(chain) // Goerli Chain ID
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainId)
 	if err != nil {
 		log.Fatal(err)
@@ -74,6 +67,7 @@ func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, ma
 		&maintainerSupply,
 		common.HexToAddress(walletAddress),
 	)
+
 	if err != nil {
 		log.Fatalf("Unable to deploy: %v\nTransaction: %v", err, transaction)
 	}

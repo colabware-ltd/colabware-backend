@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"math/big"
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
 	"github.com/ethereum/go-ethereum"
@@ -44,9 +45,9 @@ func (con Connection) ethDeploymentMonitor() {
 				}
 				if tokenAddress.Hex() != NULL_ADDRESS {
 					ethTokenAddresses = append(ethTokenAddresses, tokenAddress)
-
 					log.Printf("New token deployed: %v\n", tokenAddress.Hex())
 
+					// Update eth log filter with new token address
 					ethSubQuery = ethereum.FilterQuery{
 						Addresses: ethTokenAddresses,
 					}
@@ -55,7 +56,9 @@ func (con Connection) ethDeploymentMonitor() {
 						log.Fatal(err)
 					}
 
-					selector = bson.M{"address": projectAddress}
+					// Update project in DB with token information
+					var project Project
+					selector = bson.M{ "address": projectAddress }
 					update := bson.M{
 						"$set": bson.M{
 							"status":        "deployed",
@@ -65,8 +68,28 @@ func (con Connection) ethDeploymentMonitor() {
 					_, err = con.Projects.UpdateOne(context.TODO(), selector, update)
 					if err != nil {
 						log.Printf("%v", err)
-						return
+						continue
 					}
+					err = con.Projects.FindOne(context.TODO(), selector).Decode(&project)
+					if err != nil {
+						log.Printf("%v", err)
+						continue
+					}
+
+					// Update balance information as TokenHolding in DB
+					supply, err := contract.GetTokenSupply(&bind.CallOpts{})
+					if err != nil {
+						log.Printf("%v", err)
+						continue
+					}
+					tokens := new(big.Int).Div(supply, big.NewInt(ONE_TOKEN)).Int64()
+
+					con.updateTokenHoldings(
+						tokenAddress.Hex(),
+						NULL_ADDRESS,
+						con.getWalletFromID(project.Wallet).Address,
+						tokens,
+					)
 				}
 			}
 		}
