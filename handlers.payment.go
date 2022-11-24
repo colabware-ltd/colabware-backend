@@ -53,7 +53,7 @@ func (con Connection) calculateOrderAmount(payment Payment) int64 {
 	return amount
 }
 
-func (con Connection) createTokenPayment(c *gin.Context) {
+func (con Connection) createPaymentIntent(c *gin.Context) {
 	var p Payment
 	if err := c.BindJSON(&p); err != nil {
 		log.Printf("%v", err)

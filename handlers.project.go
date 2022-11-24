@@ -35,6 +35,12 @@ type Project struct {
 	Requests       []primitive.ObjectID `json:"requests" bson:"requests,omitempty"`
 	Roadmap        []primitive.ObjectID `json:"roadmap" bson:"roadmap,omitempty"`
 	Status         string               `json:"status" bson:"status,omitempty"`
+	ApprovalConfig ApprovalConfig       `json:"approval_config" bson:"approval_config,omitempty"`
+}
+
+type ApprovalConfig struct {
+	TokensRequired     float32 `json:"tokens_required" bson:"tokens_required,omitempty"`
+	MaintainerRequired bool    `json:"maintainer_required" bson:"maintainer_required,omitempty"`
 }
 
 type Token struct {

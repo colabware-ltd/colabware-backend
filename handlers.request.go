@@ -4,10 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/colabware-ltd/colabware-backend/contracts"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-contrib/sessions"
@@ -28,20 +33,15 @@ type Request struct {
 	Name              string               `json:"name" bson:"name,omitempty"`
 	Description       string               `json:"description" bson:"description,omitempty"`
 	Expiry            string               `json:"expiry" bson:"expiry,omitempty"`
+	Approved          bool                 `json:"approved" bson:"approved,omitempty"`
 	Categories        []string             `json:"categories" bson:"categories,omitempty"`
 	Contributions     []primitive.ObjectID `json:"contributions" bson:"contributions,omitempty"`
 	ContributionTotal float32              `json:"contribution_total" bson:"contribution_total,omitempty"`
-	ProjectVotes      []ProjectVote        `json:"project_votes" bson:"project_votes,omitempty"`
+	ApprovedBy        []string             `json:"approved_by" bson:"approved_by,omitempty"`
 	Proposals         []primitive.ObjectID `json:"proposals" bson:"proposals,omitempty"`
 	ProposalMerged    primitive.ObjectID   `json:"proposal_merged" bson:"proposal_merged,omitempty"`
 	GithubIssue       uint64               `json:"github_issue" bson:"github_issue,omitempty"`
 	Status            string               `json:"status" bson:"status,omitempty"`
-}
-
-type ProjectVote struct {
-	CreatorId   primitive.ObjectID `json:"creator_id" bson:"creator_id,omitempty"`
-	CreatorName string             `json:"creator_name" bson:"creator_name,omitempty"`
-	TokensHeld  int64              `json:"tokens" bson:"tokens,omitempty"`
 }
 
 type Issue struct {
@@ -72,6 +72,7 @@ func (con Connection) postRequest(c *gin.Context) {
 	r.CreatorName = user.Login
 	r.Project = projectId
 	r.Created = primitive.NewDateTimeFromTime(time.Now())
+	r.Approved = false
 
 	// TODO: Create issue with GitHub API
 	var project Project
@@ -234,4 +235,103 @@ func (con Connection) getRequests(c *gin.Context) {
 		return
 	}
 	c.IndentedJSON(http.StatusFound, gin.H{"total": total, "results": requestsFiltered})
+}
+
+func (con Connection) approveRequest(c *gin.Context) {
+	id,_ := primitive.ObjectIDFromHex(c.Param("request"))
+	userId := sessions.Default(c).Get("user-id")
+	var user User
+
+	// Find address of current user
+	err = con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+
+	requestUpdate := bson.M{
+		"$push": bson.M{"approved_by": user.WalletAddress},
+	}
+	_, err := con.Requests.UpdateOne(context.TODO(), bson.M{"_id": id}, requestUpdate)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+
+	// TODO: Return 
+	c.IndentedJSON(http.StatusCreated, gin.H{
+		"approved": con.checkApproval(id),
+	})
+}
+
+func (con Connection) checkApproval(id primitive.ObjectID) bool {
+	var request Request
+	var project Project
+	err = con.Requests.FindOne(context.TODO(), bson.M{"_id": id}).Decode(&request)
+	if err != nil {
+		log.Printf("%v", err)
+		return false
+	}
+	err = con.Projects.FindOne(context.TODO(), bson.M{"_id": request.Project}).Decode(&project)
+	if err != nil {
+		log.Printf("%v", err)
+		return false
+	}
+
+	// Find all token holdings associated with project request
+	filterCursor, err := con.TokenHoldings.Find(context.TODO(), bson.M{
+		"token_address": project.Token.Address,
+		"wallet_address": bson.M{
+			"$in": request.ApprovedBy,
+		},
+	})
+	if err != nil {
+		log.Printf("%v", err)
+		return false
+	}
+	var tokenHoldings []TokenHolding
+	err = filterCursor.All(context.TODO(), &tokenHoldings)
+	if err != nil {
+		log.Printf("%v", err)
+		return false
+	}
+
+	// Sum total project tokens pledged to approve request
+	var tokens uint64 = 0
+	for _, tokenHolding := range tokenHoldings {
+		tokens += tokenHolding.Balance
+	}
+	log.Printf("Tokens voted: %v", tokens)
+
+	// Get total supply of tokens
+	client, err := ethclient.Dial(config.EthNode)
+	if err != nil {
+		log.Fatalf("Unable to connect to network:%v\n", err)
+		return false
+	}
+	contract, err := contracts.NewProjectCaller(common.HexToAddress(project.Address), client)
+	if err != nil {
+		log.Fatalf("Unable to create contract binding:%v\n", err)
+		return false
+	}
+	supply, err := contract.GetTokenSupply(&bind.CallOpts{})
+	if err != nil {
+		return false
+	}
+	totalSupply := new(big.Int).Div(supply, big.NewInt(ONE_TOKEN)).Uint64()
+
+	// TODO: Include condition to check if maintainer is in the list of approvers
+	if float32(tokens) / float32(totalSupply) >= project.ApprovalConfig.TokensRequired {
+		requestUpdate := bson.M{
+			"$set": bson.M{"approved": true},
+		}
+		_, err := con.Requests.UpdateOne(context.TODO(), bson.M{"_id": id}, requestUpdate)
+		if err != nil {
+			log.Printf("%v", err)
+			return false
+		}
+		return true
+	} else {
+		return false
+	}
 }
