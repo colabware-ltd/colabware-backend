@@ -40,6 +40,7 @@ func initializeRoutes(db Connection) {
 		authorized.GET("/stripe", db.stripeAccountLink)
 		authorized.GET("/stripe/verify", db.stripeVerify)
 		authorized.POST("/payment-intent", db.createPaymentIntent)
+		authorized.GET("/token/:token/holding", db.getTokenHolding)
 	}
 	router.GET("/api/project/:project", db.getProject)
 	router.GET("/api/project/list", db.getProjects)

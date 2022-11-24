@@ -251,3 +251,32 @@ func (con Connection) getProjects(c *gin.Context) {
 	}
 	c.IndentedJSON(http.StatusFound, gin.H{"total": total, "results": projectsFiltered})
 }
+
+func (con Connection) getTokenHolding(c *gin.Context) {
+	token := c.Param("token")
+	userId := sessions.Default(c).Get("user-id")
+	var user User
+	var tokenHolding TokenHolding
+
+	// Find address of current user
+	err = con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+	selector := bson.M{
+		"token_address": token, 
+		"wallet_address": user.WalletAddress,
+	}
+	err := con.TokenHoldings.FindOne(context.TODO(), selector).Decode(&tokenHolding)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+	
+	c.IndentedJSON(http.StatusFound, gin.H{
+		"wallet_address": user.WalletAddress,
+		"token_address": token,
+		"balance": tokenHolding.Balance,
+	})
+}
