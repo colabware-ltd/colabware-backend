@@ -304,7 +304,7 @@ func (con Connection) checkApproval(id primitive.ObjectID) bool {
 	log.Printf("Tokens voted: %v", tokens)
 
 	// Get total supply of tokens
-	client, err := ethclient.Dial(config.EthNode)
+	client, err := ethclient.Dial(colabwareConf.EthNode)
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 		return false

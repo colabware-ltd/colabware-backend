@@ -111,7 +111,7 @@ func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64, n uint
 	}
 
 	// connect to an ethereum node  hosted by infura
-	client, err := ethclient.Dial(config.EthNode)
+	client, err := ethclient.Dial(colabwareConf.EthNode)
 	if err != nil {
 		return *new(common.Hash), fmt.Errorf("Unable to connect to network:%v\n", err)
 	}
@@ -167,7 +167,7 @@ func (con Connection) transferETH(r TransferETHRequest) error {
 	}
 
 	// connect to an ethereum node  hosted by infura
-	client, err := ethclient.Dial(config.EthNode)
+	client, err := ethclient.Dial(colabwareConf.EthNode)
 
 	if err != nil {
 		return fmt.Errorf("Unable to connect to network:%v\n", err)
@@ -229,7 +229,7 @@ func (con Connection) transferTest(c *gin.Context) {
 
 func (con Connection) transferTokenFromProjectToWallet(projectWallet primitive.ObjectID, toWallet primitive.ObjectID, amount float64, projectAddr common.Address, n uint64) (common.Hash, error) {
 	// connect to an ethereum node  hosted by infura
-	blockchain, err := ethclient.Dial(config.EthNode)
+	blockchain, err := ethclient.Dial(colabwareConf.EthNode)
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 	}
@@ -259,7 +259,7 @@ func (con Connection) transferTokenFromProjectToWallet(projectWallet primitive.O
 
 func (con Connection) transferTokenFromWalletToProject(projectWallet primitive.ObjectID, fromWallet primitive.ObjectID, amount float64, projectAddr common.Address) (common.Hash, error) {
 	// connect to an ethereum node  hosted by infura
-	blockchain, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	blockchain, err := ethclient.Dial(colabwareConf.EthNode)
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 	}
@@ -316,7 +316,7 @@ func (con Connection) transferToken(r TransferTokenRequest, n uint64) (common.Ha
 	}
 
 	// connect to an ethereum node  hosted by infura
-	blockchain, err := ethclient.Dial(config.EthNode)
+	blockchain, err := ethclient.Dial(colabwareConf.EthNode)
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 	}
@@ -528,7 +528,7 @@ func (con Connection) getBalance(c *gin.Context) {
 
 func readBalance(project string, wallet string) *big.Int {
 	// Connect to ETH node hosted by Infura
-	client, err := ethclient.Dial(config.EthNode)
+	client, err := ethclient.Dial(colabwareConf.EthNode)
 	if err != nil {
 		log.Fatalf("Unable to connect to network:%v\n", err)
 		return big.NewInt(-1)
