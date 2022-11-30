@@ -97,7 +97,10 @@ func (con Connection) ethLogger() {
 	for {
 		select {
 			case err := <-ethSub.Err():
-				log.Fatal(err)
+				log.Printf("%v", err)
+				// Restart EthLogger
+				con.ethLogger()
+				return
 			case vLog := <-ethLogs:
 				fmt.Printf("Log Block Number: %d\n", vLog.BlockNumber)
 				fmt.Printf("Log Index: %d\n", vLog.Index)
