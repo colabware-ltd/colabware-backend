@@ -22,6 +22,7 @@ import (
 var client *http.Client
 
 type User struct {
+	ID                 primitive.ObjectID   `json:"_id,omitempty" bson:"_id,omitempty"`
 	Login              string               `json:"login" bson:"login,omitempty"`
 	Avatar             string               `json:"avatar_url" bson:"avatar_url,omitempty"`
 	WalletAddress      string               `json:"wallet_address" bson:"wallet_address,omitempty"`

@@ -33,6 +33,7 @@ type Project struct {
 	Token          Token                `json:"token" bson:"token,omitempty"`
 	Address        string               `json:"address" bson:"address,omitempty"`
 	Wallet         primitive.ObjectID   `json:"wallet" bson:"wallet,omitempty"`
+	WalletAddress  string               `json:"wallet_address" bson:"wallet_address,omitempty"`
 	Requests       []primitive.ObjectID `json:"requests" bson:"requests,omitempty"`
 	Roadmap        []primitive.ObjectID `json:"roadmap" bson:"roadmap,omitempty"`
 	Status         string               `json:"status" bson:"status,omitempty"`
@@ -122,7 +123,8 @@ func (con Connection) postProject(c *gin.Context) {
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
 	update = bson.M{
 		"$set": bson.M{
-			"wallet":  walletId,
+			"wallet": walletId,
+			"wallet_address":  wallet.Address,
 			"address": projectAddress.Hex(),
 		},
 	}
@@ -273,8 +275,13 @@ func (con Connection) getProjects(c *gin.Context) {
 }
 
 func (con Connection) getTokenHolding(c *gin.Context) {
-	token := c.Param("token")
+	projectId, err := primitive.ObjectIDFromHex(c.Param("project"))
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
 	userId := sessions.Default(c).Get("user-id")
+	var project Project
 	var user User
 	var tokenHolding TokenHolding
 
@@ -284,11 +291,36 @@ func (con Connection) getTokenHolding(c *gin.Context) {
 		log.Printf("%v", err)
 		return
 	}
-	selector := bson.M{
-		"token_address": token, 
-		"wallet_address": user.WalletAddress,
+
+	// Find project
+	err = con.Projects.FindOne(context.TODO(), bson.M{"_id": projectId}).Decode(&project)
+	if err != nil {
+		log.Printf("%v", err)
+		return
 	}
-	err := con.TokenHoldings.FindOne(context.TODO(), selector).Decode(&tokenHolding)
+
+	// Check if user is a project maintainer
+	isMaintainer := false
+	for _, maintainer := range project.Maintainers {
+		if maintainer == user.ID {
+			isMaintainer = true
+		}
+	}
+
+	walletAddress := ""
+	if (isMaintainer) {
+		// Select project wallet if user is maintainer
+		walletAddress = project.WalletAddress
+	} else {
+		// Select user's wallet if they are not a maintainer
+		walletAddress = user.WalletAddress
+	}
+
+	selector := bson.M{
+		"token_address": project.Token.Address, 
+		"wallet_address": walletAddress,
+	}
+	err = con.TokenHoldings.FindOne(context.TODO(), selector).Decode(&tokenHolding)
 	if err != nil {
 		log.Printf("%v", err)
 		return
@@ -296,7 +328,7 @@ func (con Connection) getTokenHolding(c *gin.Context) {
 	
 	c.IndentedJSON(http.StatusFound, gin.H{
 		"wallet_address": user.WalletAddress,
-		"token_address": token,
+		"token_address": project.Token.Address,
 		"balance": tokenHolding.Balance,
 	})
 }

@@ -87,7 +87,7 @@ func (con Connection) ethDeploymentMonitor() {
 					con.updateTokenHoldings(
 						tokenAddress.Hex(),
 						NULL_ADDRESS,
-						con.getWalletFromID(project.Wallet).Address,
+						project.WalletAddress,
 						tokens,
 					)
 				}
