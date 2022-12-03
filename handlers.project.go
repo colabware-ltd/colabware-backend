@@ -101,6 +101,10 @@ func (con Connection) postProject(c *gin.Context) {
 	p.Maintainers = append(p.Maintainers, user.ID)
 	p.Status = "pending"
 
+	// TODO: Introduce as configuration option on frontend
+	p.ApprovalConfig.TokensRequired = 0.5
+	p.ApprovalConfig.MaintainerRequired = true
+
 	// TODO: Add validation to check whether project with name exists
 	result, err := con.Projects.InsertOne(context.TODO(), p)
 	selector := bson.M{"_id": user.ID}

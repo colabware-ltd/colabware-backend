@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -43,8 +44,32 @@ type GitHubError struct {
 	Message  string `json:"message" bson:"message,omitempty"`
 }
 
+func (con Connection) checkRequestApproved(id primitive.ObjectID) (bool, error) {
+	request, err := con.getRequestById(id)
+	if err != nil {
+		log.Printf("%v", err)
+		return false, fmt.Errorf("%v", err)
+	}
+	return request.Approved, nil
+}
+
 func (con Connection) postProposal(c *gin.Context) {
 	requestId,_ := primitive.ObjectIDFromHex(c.Param("request"))
+
+	// Check if request has been approved by token holders
+	request, err := con.getRequestById(requestId)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	// Stop creation of proposal if request not approved
+	if (!request.Approved) {
+		c.IndentedJSON(http.StatusForbidden, nil)
+		return
+	}
+
 	var proposal Proposal
 	if err := c.BindJSON(&proposal); err != nil {
 		log.Printf("%v", err)
@@ -57,7 +82,7 @@ func (con Connection) postProposal(c *gin.Context) {
 		ID    primitive.ObjectID `bson:"_id, omitempty"`
 		Login string             `bson:"login"`
 	}
-	err := con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
+	err = con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
 	if err != nil { 
 		log.Printf("%v", err)
 		return

@@ -51,6 +51,7 @@ func initializeRoutes(db Connection) {
 	router.GET("/api/project/:project/balances", db.getProjectBalances)
 	router.GET("/api/request/:request/proposals", db.getProposals)
 	router.GET("/api/request/:request/contributions", db.getContributions)
+	router.GET("/api/request/:request/approvers", db.getRequestApprovers)
 	router.POST("/api/createwallet", db.postWallet)
 	router.POST("/api/transfer-test", db.transferTest)
 	router.GET("/api/login", loginHandler)
