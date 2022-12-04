@@ -285,8 +285,9 @@ func (con Connection) getRequestApprovers(c *gin.Context) {
 		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
 	}
-	
-	c.IndentedJSON(http.StatusFound, *tokens)
+
+	// Check if request is approved, and return status
+	c.IndentedJSON(http.StatusFound, gin.H{ "tokens": *tokens, "approved": con.checkApproval(id)})
 }
 
 // Retrieve all tokens used to approved request
