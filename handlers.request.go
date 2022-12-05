@@ -280,13 +280,14 @@ func (con Connection) approveRequest(c *gin.Context) {
 func (con Connection) getRequestApprovers(c *gin.Context) {
 	id,_ := primitive.ObjectIDFromHex(c.Param("request"))
 	
-	_, _, tokens, err := con.getApprovingTokens(id)
+	tokenHoldings, _, tokens, err := con.getApprovingTokens(id)
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
 	}
-	
-	c.IndentedJSON(http.StatusFound, *tokens)
+
+	// Check if request is approved, and return status
+	c.IndentedJSON(http.StatusFound, gin.H{ "tokens": *tokens, "approved": con.checkApproval(id), "approvers": *tokenHoldings})
 }
 
 // Retrieve all tokens used to approved request
@@ -325,6 +326,7 @@ func (con Connection) getApprovingTokens(requestId primitive.ObjectID) (*[]Token
 	// Sum total approving tokens
 	var tokens uint64 = 0
 	for _, tokenHolding := range tokenHoldings {
+		log.Printf(tokenHolding.WalletAddress)
 		tokens += tokenHolding.Balance
 	}
 
@@ -356,17 +358,19 @@ func (con Connection) checkApproval(id primitive.ObjectID) bool {
 	totalSupply := new(big.Int).Div(supply, big.NewInt(ONE_TOKEN)).Uint64()
 
 	// TODO: Include condition to check if maintainer is in the list of approvers
+	var approved bool
 	if float32(*tokens) / float32(totalSupply) >= project.ApprovalConfig.TokensRequired {
-		requestUpdate := bson.M{
-			"$set": bson.M{"approved": true},
-		}
-		_, err := con.Requests.UpdateOne(context.TODO(), bson.M{"_id": id}, requestUpdate)
-		if err != nil {
-			log.Printf("%v", err)
-			return false
-		}
-		return true
+		approved = true
 	} else {
+		approved = false
+	}
+	requestUpdate := bson.M{
+		"$set": bson.M{"approved": approved},
+	}
+	_, err = con.Requests.UpdateOne(context.TODO(), bson.M{"_id": id}, requestUpdate)
+	if err != nil {
+		log.Printf("%v", err)
 		return false
 	}
+	return approved
 }

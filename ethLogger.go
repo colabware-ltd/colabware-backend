@@ -25,9 +25,9 @@ var ethLogs chan types.Log
 var ethSubQuery ethereum.FilterQuery
 
 type TokenHolding struct {
-	WalletAddress string `json:"wallet_address"`
-	TokenAddress  string `json:"token_address"`
-	Balance       uint64 `json:"balance"`
+	WalletAddress string `json:"wallet_address" bson:"wallet_address"`
+	TokenAddress  string `json:"token_address" bson:"token_address"`
+	Balance       uint64 `json:"balance" bson:"balance"`
 } 
 
 func (con Connection) getTokenAddresses() {
