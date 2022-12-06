@@ -180,6 +180,16 @@ func (con Connection) getProjectByName(name string) (*Project, error) {
 	return &project, nil
 }
 
+func (con Connection) getProjectById(id primitive.ObjectID) (*Project, error) {
+	var project Project
+	selector := bson.M{"_id": id}
+	err := con.Projects.FindOne(context.TODO(), selector).Decode(&project)
+	if err != nil {
+		return nil, fmt.Errorf("%v", err)
+	}
+	return &project, nil
+}
+
 func (con Connection) getProjectByWalletID(id primitive.ObjectID) (*Project, error) {
 	var project Project
 	selector := bson.M{"wallet": id}
@@ -285,7 +295,6 @@ func (con Connection) getTokenHolding(c *gin.Context) {
 		return
 	}
 	userId := sessions.Default(c).Get("user-id")
-	var project Project
 	var user User
 	var tokenHolding TokenHolding
 
@@ -296,23 +305,15 @@ func (con Connection) getTokenHolding(c *gin.Context) {
 		return
 	}
 
-	// Find project
-	err = con.Projects.FindOne(context.TODO(), bson.M{"_id": projectId}).Decode(&project)
+	maintainer, project, err := con.isMaintainer(user.ID, projectId)
 	if err != nil {
 		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
 	}
 
-	// Check if user is a project maintainer
-	isMaintainer := false
-	for _, maintainer := range project.Maintainers {
-		if maintainer == user.ID {
-			isMaintainer = true
-		}
-	}
-
 	walletAddress := ""
-	if (isMaintainer) {
+	if (maintainer) {
 		// Select project wallet if user is maintainer
 		walletAddress = project.WalletAddress
 	} else {
@@ -335,4 +336,22 @@ func (con Connection) getTokenHolding(c *gin.Context) {
 		"token_address": project.Token.Address,
 		"balance": tokenHolding.Balance,
 	})
+}
+
+func (con Connection) isMaintainer(userId primitive.ObjectID, projectId primitive.ObjectID) (bool, *Project, error) {
+	project, err := con.getProjectById(projectId)
+	if err != nil {
+		log.Printf("%v", err)
+		return false, nil, fmt.Errorf("%v", err)
+	}
+
+	isMaintainer := false
+	for _, maintainer := range project.Maintainers {
+		if maintainer == userId {
+			isMaintainer = true
+			break
+		}
+	}
+	
+	return isMaintainer, project, nil
 }

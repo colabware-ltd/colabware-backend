@@ -258,19 +258,42 @@ func (con Connection) approveRequest(c *gin.Context) {
 	err = con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
 	if err != nil {
 		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
 	}
 
-	requestUpdate := bson.M{
-		"$push": bson.M{"approved_by": user.WalletAddress},
+	request, err := con.getRequestById(id)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
 	}
-	_, err := con.Requests.UpdateOne(context.TODO(), bson.M{"_id": id}, requestUpdate)
+
+	// Check if user is maintaier, and ensure that the project wallet is used.
+	// If user is not a maintainer, use their own wallet address for approval.
+	maintainer, project, err := con.isMaintainer(user.ID, request.Project)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	var wallet string
+	if maintainer {
+		wallet = project.WalletAddress
+	} else {
+		wallet = user.WalletAddress
+	}
+
+	requestUpdate := bson.M{
+		"$push": bson.M{"approved_by": wallet},
+	}
+	_, err = con.Requests.UpdateOne(context.TODO(), bson.M{"_id": id}, requestUpdate)
 	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
 
-	// TODO: Return 
 	c.IndentedJSON(http.StatusCreated, gin.H{
 		"approved": con.checkApproval(id),
 	})
