@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -36,16 +37,22 @@ type ProposalVote struct {
 }
 
 type PullRequest struct {
-	Title  string `json:"title" bson:"title,omitempty"`
-	Body   string `json:"body" bson:"body,omitempty"`
-	Head   string `json:"head" bson:"head,omitempty"`
-	Base   string `json:"base" bson:"base,omitempty"`
+	Title string `json:"title" bson:"title,omitempty"`
+	Body  string `json:"body" bson:"body,omitempty"`
+	Head  string `json:"head" bson:"head,omitempty"`
+	Base  string `json:"base" bson:"base,omitempty"`
 }
 
 type GitHubError struct {
 	Resource string `json:"resource" bson:"resource,omitempty"`
 	Code     string `json:"code" bson:"code,omitempty"`
 	Message  string `json:"message" bson:"message,omitempty"`
+}
+
+type GitHubResMergePR struct {
+	Number  uint64        `json:"number" bson:"number,omitempty"`
+	Message string        `json:"message" bson:"message,omitempty"`
+	Errors  []GitHubError `json:"errors" bson:"errors,omitempty"`
 }
 
 func (con Connection) checkRequestApproved(id primitive.ObjectID) (bool, error) {
@@ -58,7 +65,7 @@ func (con Connection) checkRequestApproved(id primitive.ObjectID) (bool, error) 
 }
 
 func (con Connection) postProposal(c *gin.Context) {
-	requestId,_ := primitive.ObjectIDFromHex(c.Param("request"))
+	requestId, _ := primitive.ObjectIDFromHex(c.Param("request"))
 
 	// Check if request has been approved by token holders
 	request, err := con.getRequestById(requestId)
@@ -69,7 +76,7 @@ func (con Connection) postProposal(c *gin.Context) {
 	}
 
 	// Stop creation of proposal if request not approved
-	if (!request.Approved) {
+	if !request.Approved {
 		c.IndentedJSON(http.StatusForbidden, nil)
 		return
 	}
@@ -87,7 +94,7 @@ func (con Connection) postProposal(c *gin.Context) {
 		Login string             `bson:"login"`
 	}
 	err = con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
-	if err != nil { 
+	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
@@ -108,12 +115,12 @@ func (con Connection) postProposal(c *gin.Context) {
 		Errors  []GitHubError `json:"errors" bson:"errors,omitempty"`
 	}
 
-	res, err := client.Post("https://api.github.com/repos/" + proposal.Repository + "/pulls", "application/vnd.github+json", reader)
+	res, err := client.Post("https://api.github.com/repos/"+proposal.Repository+"/pulls", "application/vnd.github+json", reader)
 	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
-    defer res.Body.Close()
+	defer res.Body.Close()
 	err = json.NewDecoder(res.Body).Decode(&resTarget)
 	if err != nil {
 		log.Printf("%v", err)
@@ -128,7 +135,7 @@ func (con Connection) postProposal(c *gin.Context) {
 			log.Printf("%v", err)
 			return
 		}
-	
+
 		// Create response in DB once PR is created
 		requestSelector := bson.M{"_id": requestId}
 		requestUpdate := bson.M{
@@ -151,7 +158,7 @@ func (con Connection) postProposal(c *gin.Context) {
 }
 
 func (con Connection) getProposals(c *gin.Context) {
-	requestId,_ := primitive.ObjectIDFromHex(c.Param("request"))
+	requestId, _ := primitive.ObjectIDFromHex(c.Param("request"))
 	proposalSelector := bson.M{"request_id": requestId}
 	filterCursor, err := con.Proposals.Find(context.TODO(), proposalSelector)
 	var proposalsFiltered []bson.M
@@ -165,14 +172,14 @@ func (con Connection) getProposals(c *gin.Context) {
 }
 
 func (con Connection) postSelectedProposal(c *gin.Context) {
-	proposalId,_ := primitive.ObjectIDFromHex(c.Param("proposal"))
-	requestId,_ := primitive.ObjectIDFromHex(c.Param("request"))
+	proposalId, _ := primitive.ObjectIDFromHex(c.Param("proposal"))
+	requestId, _ := primitive.ObjectIDFromHex(c.Param("request"))
 	userId := sessions.Default(c).Get("user-id")
 
 	var contribution Contribution
 
 	contributionSelector := bson.M{
-		"request_id": requestId,
+		"request_id":   requestId,
 		"creator_name": userId,
 	}
 	err := con.Contributions.FindOne(context.TODO(), contributionSelector).Decode(&contribution)
@@ -197,7 +204,7 @@ func (con Connection) postSelectedProposal(c *gin.Context) {
 		log.Printf("%v", err)
 		return
 	}
-    
+
 	// Add contribution allocated to newly selected proposal
 	proposalSelector = bson.M{
 		"_id": proposalId,
@@ -212,7 +219,7 @@ func (con Connection) postSelectedProposal(c *gin.Context) {
 		log.Printf("%v", err)
 		return
 	}
-	
+
 	// Update contribution with selected proposal
 	contributionUpdate := bson.M{
 		"$set": bson.M{
@@ -220,7 +227,7 @@ func (con Connection) postSelectedProposal(c *gin.Context) {
 		},
 	}
 	_, err = con.Contributions.UpdateMany(context.TODO(), contributionSelector, contributionUpdate)
-	if err != nil { 
+	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
@@ -240,8 +247,8 @@ func (con Connection) getProposalById(id primitive.ObjectID) (*Proposal, error) 
 
 // TODO: Complete request; pay out submission amounts.
 func (con Connection) mergeProposal(c *gin.Context) {
-	requestId,_ := primitive.ObjectIDFromHex(c.Param("request"))
-	proposalId,_ := primitive.ObjectIDFromHex(c.Param("proposal"))
+	requestId, _ := primitive.ObjectIDFromHex(c.Param("request"))
+	proposalId, _ := primitive.ObjectIDFromHex(c.Param("proposal"))
 	userId := sessions.Default(c).Get("user-id")
 
 	var user User
@@ -258,7 +265,6 @@ func (con Connection) mergeProposal(c *gin.Context) {
 		return
 	}
 
-
 	// Check if user is maintainer
 	maintainer, _, err := con.isMaintainer(user.ID, request.Project)
 	if err != nil {
@@ -271,7 +277,52 @@ func (con Connection) mergeProposal(c *gin.Context) {
 		return
 	}
 
-	for _, p := range request.Proposals {
+	proposal, err := con.getProposalById(proposalId)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	// TODO: Handle incomplete PR from GitHub (other than 201 response)
+	_, status, err := mergePullRequest(proposal)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	if status != 201 {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	requestUpdate := bson.M{
+		"$set": bson.M{
+			"proposal_merged": proposalId,
+			"status":          "closed",
+		},
+	}
+	_, err = con.Requests.UpdateOne(context.TODO(), bson.M{"_id": requestId}, requestUpdate)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+
+	// Process disbursement of allocated request funds
+	err = con.processDisbursement(request.Proposals)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	c.IndentedJSON(http.StatusCreated, bson.M{})
+}
+
+func (con Connection) processDisbursement(proposals []primitive.ObjectID) (error) {
+	// TODO: Disburse unassigned funds to winning proposal
+	for _, p := range proposals {
 		proposal, err := con.getProposalById(p)
 		if err != nil {
 			log.Printf("%v", err)
@@ -286,8 +337,8 @@ func (con Connection) mergeProposal(c *gin.Context) {
 		}
 
 		params := &stripe.TransferParams{
-			Amount: stripe.Int64(int64(proposal.ContributionTotal) * 100),
-			Currency: stripe.String(string(stripe.CurrencyUSD)),
+			Amount:      stripe.Int64(int64(proposal.ContributionTotal) * 100),
+			Currency:    stripe.String(string(stripe.CurrencyUSD)),
 			Destination: stripe.String(user.StripeAccount.AccountID),
 		}
 
@@ -302,25 +353,47 @@ func (con Connection) mergeProposal(c *gin.Context) {
 					"payment_status": "complete",
 				},
 			}
-			_, err = con.Proposals.UpdateOne(context.TODO(), bson.M{ "_id": p }, proposalUpdate)
-			if err != nil { 
+			_, err = con.Proposals.UpdateOne(context.TODO(), bson.M{"_id": p}, proposalUpdate)
+			if err != nil {
 				log.Printf("%v", err)
-				return
+				return fmt.Errorf("%v", err)
 			}
 		}
 	}
+	return nil
+}
 
-	requestUpdate := bson.M{
-		"$set": bson.M{
-			"proposal_merged": proposalId,
-			"status": "closed",
-		},
-	}
-	_, err = con.Requests.UpdateOne(context.TODO(), bson.M{ "_id": requestId }, requestUpdate)
-	if err != nil { 
+func mergePullRequest(proposal *Proposal) (*GitHubResMergePR, int, error) {
+	payload, err := json.Marshal(map[string]interface{}{})
+	if err != nil {
 		log.Printf("%v", err)
-		return
+		return nil, -1, fmt.Errorf("%v", err)
 	}
 
-	c.IndentedJSON(http.StatusCreated, bson.M{})
+	var resBody GitHubResMergePR
+
+	url := "https://api.github.com/repos/" + proposal.Repository + "/pulls/" + strconv.FormatUint(proposal.PullRequestNumber, 10) + "/merge"
+
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(payload))
+	if err != nil {
+		log.Printf("%v", err)
+		return nil, -1, fmt.Errorf("%v", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Printf("%v", err)
+		return nil, -1, fmt.Errorf("%v", err)
+	}
+
+	defer res.Body.Close()
+
+	err = json.NewDecoder(res.Body).Decode(&resBody)
+	if err != nil {
+		log.Printf("%v", err)
+		return nil, -1, fmt.Errorf("%v", err)
+	}
+
+	return &resBody, res.StatusCode, nil
 }
