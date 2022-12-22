@@ -241,3 +241,13 @@ func (con Connection) stripeVerify(c *gin.Context) {
 
 	c.Redirect(http.StatusFound, "/")
 }
+
+func (con Connection) getUserById(id primitive.ObjectID) (*User, error) {
+	var user User
+	err = con.Users.FindOne(context.TODO(), bson.M{"_id": id}).Decode(&user)
+	if err != nil {
+		log.Printf("%v", err)
+		return nil, fmt.Errorf("%v", err)
+	}
+	return &user, nil
+}

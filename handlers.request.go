@@ -42,7 +42,7 @@ type Request struct {
 	Proposals         []primitive.ObjectID `json:"proposals" bson:"proposals,omitempty"`
 	ProposalMerged    primitive.ObjectID   `json:"proposal_merged" bson:"proposal_merged,omitempty"`
 	GithubIssue       uint64               `json:"github_issue" bson:"github_issue,omitempty"`
-	Status            string               `json:"status" bson:"status,omitempty"`
+	Status            string               `json:"status" bson:"status"`
 }
 
 type Issue struct {
@@ -74,6 +74,7 @@ func (con Connection) postRequest(c *gin.Context) {
 	r.Project = projectId
 	r.Created = primitive.NewDateTimeFromTime(time.Now())
 	r.Approved = false
+	r.Status = "open"
 	r.ApprovedBy = []string{}
 
 	// TODO: Create issue with GitHub API
@@ -183,7 +184,7 @@ func (con Connection) handleExpiry(expiry string, requestId primitive.ObjectID) 
 			}
 			requestUpdate = bson.M{
 				"$set": bson.M{
-					"status": "expired",
+					"status": "closed",
 				},
 			}
 			_, err = con.Requests.UpdateOne(context.TODO(), bson.M{"_id": requestId}, requestUpdate)

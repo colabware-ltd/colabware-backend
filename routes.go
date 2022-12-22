@@ -43,6 +43,7 @@ func initializeRoutes(db Connection) {
 		authorized.POST("/purchase-token", db.purchaseToken)
 		authorized.POST("/payment-intent", db.createPaymentIntent)
 		authorized.GET("/project/:project/tokens", db.getTokenHolding)
+		authorized.GET("/request/:request/proposal/:proposal/merge", db.mergeProposal)
 	}
 	router.GET("/api/project/:project", db.getProject)
 	router.GET("/api/project/list", db.getProjects)

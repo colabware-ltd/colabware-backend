@@ -10,6 +10,8 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/transfer"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -20,6 +22,8 @@ type Proposal struct {
 	RequestId         primitive.ObjectID `json:"request_id" bson:"request_id,omitempty"`
 	Repository        string             `json:"repository" bson:"repository,omitempty"`
 	ContributionTotal float32            `json:"contribution_total" bson:"contribution_total"`
+	PaymentStatus     string             `json:"payment_status" bson:"payment_status,omitempty"`
+	Transactions      []string           `json:"transactions" bson:"transactions,omitempty"`
 	PullRequest       PullRequest        `json:"pull_request" bson:"pull_request,omitempty"`
 	PullRequestNumber uint64             `json:"pull_request_number" bson:"pull_request_number,omitempty"`
 	PullRequestRepo   string             `json:"pull_request_repo" bson:"pull_request_repo,omitempty"`
@@ -129,6 +133,9 @@ func (con Connection) postProposal(c *gin.Context) {
 		requestSelector := bson.M{"_id": requestId}
 		requestUpdate := bson.M{
 			"$push": bson.M{"proposals": result.InsertedID},
+			"$set": bson.M{
+				"status": "pending",
+			},
 		}
 		_, err = con.Requests.UpdateOne(context.TODO(), requestSelector, requestUpdate)
 		if err != nil {
@@ -190,7 +197,7 @@ func (con Connection) postSelectedProposal(c *gin.Context) {
 		log.Printf("%v", err)
 		return
 	}
-	
+    
 	// Add contribution allocated to newly selected proposal
 	proposalSelector = bson.M{
 		"_id": proposalId,
@@ -213,6 +220,103 @@ func (con Connection) postSelectedProposal(c *gin.Context) {
 		},
 	}
 	_, err = con.Contributions.UpdateMany(context.TODO(), contributionSelector, contributionUpdate)
+	if err != nil { 
+		log.Printf("%v", err)
+		return
+	}
+
+	c.IndentedJSON(http.StatusCreated, bson.M{})
+}
+
+func (con Connection) getProposalById(id primitive.ObjectID) (*Proposal, error) {
+	var proposal Proposal
+	err = con.Proposals.FindOne(context.TODO(), bson.M{"_id": id}).Decode(&proposal)
+	if err != nil {
+		log.Printf("%v", err)
+		return nil, fmt.Errorf("%v", err)
+	}
+	return &proposal, nil
+}
+
+// TODO: Complete request; pay out submission amounts.
+func (con Connection) mergeProposal(c *gin.Context) {
+	requestId,_ := primitive.ObjectIDFromHex(c.Param("request"))
+	proposalId,_ := primitive.ObjectIDFromHex(c.Param("proposal"))
+	userId := sessions.Default(c).Get("user-id")
+
+	var user User
+	err = con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+
+	request, err := con.getRequestById(requestId)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+
+	// Check if user is maintainer
+	maintainer, _, err := con.isMaintainer(user.ID, request.Project)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	if !maintainer {
+		c.IndentedJSON(http.StatusUnauthorized, nil)
+		return
+	}
+
+	for _, p := range request.Proposals {
+		proposal, err := con.getProposalById(p)
+		if err != nil {
+			log.Printf("%v", err)
+			continue
+		}
+
+		// Check that proposal creator has connected their Stripe account
+		user, err := con.getUserById(proposal.CreatorId)
+		if err != nil {
+			log.Printf("%v", err)
+			continue
+		}
+
+		params := &stripe.TransferParams{
+			Amount: stripe.Int64(int64(proposal.ContributionTotal) * 100),
+			Currency: stripe.String(string(stripe.CurrencyUSD)),
+			Destination: stripe.String(user.StripeAccount.AccountID),
+		}
+
+		tf, err := transfer.New(params)
+		if err != nil {
+			log.Printf("%v", err)
+			continue
+		} else {
+			proposalUpdate := bson.M{
+				"$push": bson.M{"transactions": tf.ID},
+				"$set": bson.M{
+					"payment_status": "complete",
+				},
+			}
+			_, err = con.Proposals.UpdateOne(context.TODO(), bson.M{ "_id": p }, proposalUpdate)
+			if err != nil { 
+				log.Printf("%v", err)
+				return
+			}
+		}
+	}
+
+	requestUpdate := bson.M{
+		"$set": bson.M{
+			"proposal_merged": proposalId,
+			"status": "closed",
+		},
+	}
+	_, err = con.Requests.UpdateOne(context.TODO(), bson.M{ "_id": requestId }, requestUpdate)
 	if err != nil { 
 		log.Printf("%v", err)
 		return
