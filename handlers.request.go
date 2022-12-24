@@ -119,6 +119,9 @@ func (con Connection) postRequest(c *gin.Context) {
 
 	projectUpdate := bson.M{
 		"$push": bson.M{"requests": result.InsertedID},
+		"$inc": bson.M{
+			"request_count": 1,
+		},
 	}
 	_, err = con.Projects.UpdateOne(context.TODO(), projectSelector, projectUpdate)
 	if err != nil {
@@ -130,6 +133,7 @@ func (con Connection) postRequest(c *gin.Context) {
 	con.handleExpiry(r.Expiry, result.InsertedID.(primitive.ObjectID))
 }
 
+// TODO: Handle expired requests using Go routine instead
 func (con Connection) handleExpiry(expiry string, requestId primitive.ObjectID) {
 	// Handle actions on expiry
 	taskScheduler := chrono.NewDefaultTaskScheduler()
@@ -154,7 +158,7 @@ func (con Connection) handleExpiry(expiry string, requestId primitive.ObjectID) 
 		}
 
 		// If no proposals submitted, refund contributors
-		if len(request.Proposals) == 0 || request.Proposals == nil {
+		if (len(request.Proposals) == 0 || request.Proposals == nil) && request.Status != "closed" {
 
 			// Find all contributions for request to refund
 			filterCursor, err := con.Contributions.Find(context.TODO(), bson.M{"request_id": requestId})

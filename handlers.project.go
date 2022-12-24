@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -25,6 +27,7 @@ import (
 // be able to access this wallet. Wallet should hold maintainer tokens.
 type Project struct {
 	ID             primitive.ObjectID   `json:"_id,omitempty" bson:"_id,omitempty"`
+	Created        primitive.DateTime   `json:"created" bson:"created,omitempty"`
 	Name           string               `json:"name" bson:"name,omitempty"`
 	GitHub         GitHub               `json:"github" bson:"github,omitempty"`
 	Description    string               `json:"description" bson:"description,omitempty"`
@@ -35,6 +38,7 @@ type Project struct {
 	Wallet         primitive.ObjectID   `json:"wallet" bson:"wallet,omitempty"`
 	WalletAddress  string               `json:"wallet_address" bson:"wallet_address,omitempty"`
 	Requests       []primitive.ObjectID `json:"requests" bson:"requests,omitempty"`
+	RequestCount   uint64               `json:"request_count" bson:"request_count"`
 	Roadmap        []primitive.ObjectID `json:"roadmap" bson:"roadmap,omitempty"`
 	Status         string               `json:"status" bson:"status,omitempty"`
 	ApprovalConfig ApprovalConfig       `json:"approval_config" bson:"approval_config,omitempty"`
@@ -100,6 +104,8 @@ func (con Connection) postProject(c *gin.Context) {
 	}
 	p.Maintainers = append(p.Maintainers, user.ID)
 	p.Status = "pending"
+	p.RequestCount = 0
+	p.Created = primitive.NewDateTimeFromTime(time.Now())
 
 	// TODO: Introduce as configuration option on frontend
 	p.ApprovalConfig.TokensRequired = 0.5
@@ -266,13 +272,37 @@ func (con Connection) getProjects(c *gin.Context) {
 		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
 	}
+	orderBy := c.DefaultQuery("orderBy", "created")
+	filterBy := strings.Split(c.DefaultQuery("filterBy", ""), ",")
+	desc, err := strconv.ParseBool(c.DefaultQuery("desc", "true"))
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	sortDirection := 1
+	if desc {
+		sortDirection = -1
+	}
 
 	options := options.Find()
 	options.SetProjection(bson.M{"name": 1, "categories": 1, "description": 1, "_id": 0})
 	options.SetLimit(limitInt)
 	options.SetSkip(limitInt * (pageInt - 1))
-	total, err := con.Projects.CountDocuments(context.TODO(), bson.M{})
-	filterCursor, err := con.Projects.Find(context.TODO(), bson.M{}, options)
+	options.SetSort(bson.M{orderBy: sortDirection})
+	
+	projectSelector := bson.M{}
+	if filterBy[0] != "" {
+		projectSelector = bson.M{
+			"categories": bson.M{
+				"$in": filterBy,
+			},
+		}
+	}
+
+	total, err := con.Projects.CountDocuments(context.TODO(), projectSelector)
+	filterCursor, err := con.Projects.Find(context.TODO(), projectSelector, options)
 	if err != nil {
 		log.Printf("%v", err)
 		c.IndentedJSON(http.StatusInternalServerError, nil)
