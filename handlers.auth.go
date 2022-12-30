@@ -28,6 +28,10 @@ type User struct {
 	WalletAddress      string               `json:"wallet_address" bson:"wallet_address,omitempty"`
 	ProjectsMaintained []primitive.ObjectID `json:"projects_maintained" bson:"projects_maintained,omitempty"`
 	StripeAccount      StripeAccount        `json:"stripe_account" bson:"stripe_account,omitempty"`
+	Name               string               `json:"name,omitempty" bson:"name,omitempty"`
+	Email              string               `json:"email,omitempty" bson:"email,omitempty"`
+	Location           string               `json:"location,omitempty" bson:"location,omitempty"`
+	Bio                string               `json:"bio,omitempty" bson:"bio,omitempty"`
 }
 
 type StripeAccount struct {
@@ -250,4 +254,25 @@ func (con Connection) getUserById(id primitive.ObjectID) (*User, error) {
 		return nil, fmt.Errorf("%v", err)
 	}
 	return &user, nil
+}
+
+func (con Connection) updateUserDetails(c *gin.Context) {
+	userId := sessions.Default(c).Get("user-id")
+	var user User
+	if err := c.BindJSON(&user); err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	userUpdate := bson.M{
+		"$set": bson.M{"name": user.Name, "email": user.Email, "location": user.Location, "bio": user.Bio},
+	}
+	_, err = con.Users.UpdateOne(context.TODO(), bson.M{"login": userId}, userUpdate)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	c.IndentedJSON(http.StatusCreated, gin.H{})
 }

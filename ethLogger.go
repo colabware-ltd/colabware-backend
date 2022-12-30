@@ -28,6 +28,10 @@ type TokenHolding struct {
 	WalletAddress string `json:"wallet_address" bson:"wallet_address"`
 	TokenAddress  string `json:"token_address" bson:"token_address"`
 	Balance       uint64 `json:"balance" bson:"balance"`
+	TotalSupply   uint64 `json:"total_supply" bson:"total_supply"`
+	TokenName     string `json:"token_name" bson:"token_name"`
+	TokenSymbol   string `json:"token_symbol" bson:"token_symbol"`
+	ProjectName   string `json:"project_name" bson:"project_name"`
 } 
 
 func (con Connection) getTokenAddresses() {
@@ -55,16 +59,36 @@ func (con Connection) getTokenAddresses() {
 	}
 }
 
-func (con Connection) updateTokenHoldings(tokenAddress string, fromAddress string, toAddress string, amount int64) {
+func (con Connection) updateTokenHoldings(tokenAddress string, fromAddress string, toAddress string, amount int64) (error) {
 	opts := options.FindOneAndUpdate().SetUpsert(true)
+
+	// Get Project details
+	project, err := con.getProjectByTokenAddress(tokenAddress)
+	if err != nil {
+		log.Printf("%v", err)
+		return fmt.Errorf("%v", err)
+	}
+
+	// Get total balance
+	totalSupply, err := con.getTotalSupply(project.Address)
+	if err != nil {
+		log.Printf("%v", err)
+		return fmt.Errorf("%v", err)
+	}
 
 	toSelector := bson.M{
 		"wallet_address": toAddress,
 		"token_address": tokenAddress,
 	}
-	toUpdate := bson.M{ 
+	toUpdate := bson.M{
 		"$inc": bson.M{
 			"balance": amount,
+		},
+		"$set": bson.M{
+			"token_name": project.Token.Name,
+			"token_symbol": project.Token.Symbol,
+			"project_name": project.Name,
+			"total_supply": totalSupply,
 		},
 	}
 	con.TokenHoldings.FindOneAndUpdate(context.TODO(), toSelector, toUpdate, opts)
@@ -79,9 +103,16 @@ func (con Connection) updateTokenHoldings(tokenAddress string, fromAddress strin
 			"$inc": bson.M{
 				"balance": -amount,
 			},
+			"$set": bson.M{
+				"token_name": project.Token.Name,
+				"token_symbol": project.Token.Symbol,
+				"project_name": project.Name,
+				"total_supply": totalSupply,
+			},
 		}
 		con.TokenHoldings.FindOneAndUpdate(context.TODO(), fromSelector, fromUpdate)
 	}
+	return nil
 }
 
 func (con Connection) ethLogger() {

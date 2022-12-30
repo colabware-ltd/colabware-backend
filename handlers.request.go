@@ -5,15 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/colabware-ltd/colabware-backend/contracts"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-contrib/sessions"
@@ -204,7 +199,25 @@ func (con Connection) handleExpiry(expiry string, requestId primitive.ObjectID) 
 	}
 }
 
-func (con Connection) getRequests(c *gin.Context) {
+func (con Connection) getUserRequests(c *gin.Context) {
+	userId := sessions.Default(c).Get("user-id")
+	filterCursor, err := con.Requests.Find(context.TODO(), bson.M{"creator_name": userId})
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	var requests []Request
+	err = filterCursor.All(context.TODO(), &requests)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	c.IndentedJSON(http.StatusFound, gin.H{"results": requests})
+}
+
+func (con Connection) getProjectRequests(c *gin.Context) {
 	id,_ := primitive.ObjectIDFromHex(c.Param("project"))
 	status := c.DefaultQuery("status", "open")
 	page := c.DefaultQuery("page", "1")
@@ -299,8 +312,15 @@ func (con Connection) approveRequest(c *gin.Context) {
 		return
 	}
 
+	isApproved, err := con.checkApproval(id)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
 	c.IndentedJSON(http.StatusCreated, gin.H{
-		"approved": con.checkApproval(id),
+		"approved": isApproved,
 	})
 }
 
@@ -314,8 +334,15 @@ func (con Connection) getRequestApprovers(c *gin.Context) {
 		return
 	}
 
+	isApproved, err := con.checkApproval(id)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
 	// Check if request is approved, and return status
-	c.IndentedJSON(http.StatusFound, gin.H{ "tokens": *tokens, "approved": con.checkApproval(id), "approvers": *tokenHoldings})
+	c.IndentedJSON(http.StatusFound, gin.H{ "tokens": *tokens, "approved": isApproved, "approvers": *tokenHoldings})
 }
 
 // Retrieve all tokens used to approved request
@@ -361,29 +388,19 @@ func (con Connection) getApprovingTokens(requestId primitive.ObjectID) (*[]Token
 	return &tokenHoldings, &project, &tokens, nil
 }
 
-func (con Connection) checkApproval(id primitive.ObjectID) bool {
+func (con Connection) checkApproval(id primitive.ObjectID) (bool, error) {
 	_, project, tokens, err := con.getApprovingTokens(id)
 	if err != nil {
 		log.Printf("%v", err)
-		return false
+		return false, fmt.Errorf("%v", err)
 	}
 
-	// Get total supply of tokens
-	client, err := ethclient.Dial(colabwareConf.EthNode)
+	// // Get total supply of tokens
+	totalSupply, err := con.getTotalSupply(project.Address)
 	if err != nil {
-		log.Fatalf("Unable to connect to network:%v\n", err)
-		return false
+		log.Printf("%v", err)
+		return false, fmt.Errorf("%v", err)
 	}
-	contract, err := contracts.NewProjectCaller(common.HexToAddress(project.Address), client)
-	if err != nil {
-		log.Fatalf("Unable to create contract binding:%v\n", err)
-		return false
-	}
-	supply, err := contract.GetTokenSupply(&bind.CallOpts{})
-	if err != nil {
-		return false
-	}
-	totalSupply := new(big.Int).Div(supply, big.NewInt(ONE_TOKEN)).Uint64()
 
 	// TODO: Include condition to check if maintainer is in the list of approvers
 	var approved bool
@@ -398,7 +415,7 @@ func (con Connection) checkApproval(id primitive.ObjectID) bool {
 	_, err = con.Requests.UpdateOne(context.TODO(), bson.M{"_id": id}, requestUpdate)
 	if err != nil {
 		log.Printf("%v", err)
-		return false
+		return false, fmt.Errorf("%v", err)
 	}
-	return approved
+	return approved, nil
 }

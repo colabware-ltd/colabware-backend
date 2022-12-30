@@ -14,6 +14,7 @@ import (
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
 	"github.com/colabware-ltd/colabware-backend/utilities"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-contrib/sessions"
@@ -189,6 +190,16 @@ func (con Connection) getProjectByName(name string) (*Project, error) {
 func (con Connection) getProjectById(id primitive.ObjectID) (*Project, error) {
 	var project Project
 	selector := bson.M{"_id": id}
+	err := con.Projects.FindOne(context.TODO(), selector).Decode(&project)
+	if err != nil {
+		return nil, fmt.Errorf("%v", err)
+	}
+	return &project, nil
+}
+
+func (con Connection) getProjectByTokenAddress(address string) (*Project, error) {
+	var project Project
+	selector := bson.M{"token.address": address}
 	err := con.Projects.FindOne(context.TODO(), selector).Decode(&project)
 	if err != nil {
 		return nil, fmt.Errorf("%v", err)
@@ -384,4 +395,26 @@ func (con Connection) isMaintainer(userId primitive.ObjectID, projectId primitiv
 	}
 	
 	return isMaintainer, project, nil
+}
+
+func (con Connection) getTotalSupply(address string) (int64, error) {
+	// Get total supply of tokens
+	client, err := ethclient.Dial(colabwareConf.EthNode)
+	if err != nil {
+		log.Printf("%v", err)
+		return -1, fmt.Errorf("%v", err)
+	}
+	contract, err := contracts.NewProjectCaller(common.HexToAddress(address), client)
+	if err != nil {
+		log.Printf("%v", err)
+		return -1, fmt.Errorf("%v", err)
+	}
+	supply, err := contract.GetTokenSupply(&bind.CallOpts{})
+	if err != nil {
+		log.Printf("%v", err)
+		return -1, fmt.Errorf("%v", err)
+	}
+	totalSupply := new(big.Int).Div(supply, big.NewInt(ONE_TOKEN)).Int64()
+
+	return totalSupply, nil
 }

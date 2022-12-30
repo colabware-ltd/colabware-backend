@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/gin-contrib/sessions"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-gonic/gin"
@@ -337,4 +338,33 @@ func (con Connection) flipRecordFlag(id primitive.ObjectID, flag string) error {
 	}
 
 	return nil
+}
+
+func (con Connection) getUserTokens(c *gin.Context) {
+	userId := sessions.Default(c).Get("user-id")
+	var user User
+
+	// Get wallet address of current user
+	err = con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	// Get token holdings for user
+	filterCursor, err := con.TokenHoldings.Find(context.TODO(), bson.M{"wallet_address": user.WalletAddress})
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	var tokenHoldings []TokenHolding
+	err = filterCursor.All(context.TODO(), &tokenHoldings)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	c.IndentedJSON(http.StatusFound, gin.H{"results": tokenHoldings})
 }
