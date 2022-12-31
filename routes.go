@@ -3,8 +3,6 @@ package main
 import (
 	"net/http"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
@@ -16,7 +14,6 @@ func authorizeRequest() gin.HandlerFunc {
 		v := session.Get("user-id")
 		if v == nil {
 			c.IndentedJSON(http.StatusUnauthorized, nil)
-			log.Println("f")
 			c.Abort()
 		}
 		c.Next()

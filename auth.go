@@ -10,7 +10,7 @@ import (
 var conf *oauth2.Config
 var state string
 
-func initAuth() {
+func initAuth() {	
 	conf = &oauth2.Config{
 		ClientID:     colabwareConf.GitHubCID,
 		ClientSecret: colabwareConf.GitHubCSecret,

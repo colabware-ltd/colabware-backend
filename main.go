@@ -58,6 +58,21 @@ func initDB() *mongo.Client {
 
 }
 
+func checkAuth(c *gin.Context) {
+	session := sessions.Default(c)
+	userId := session.Get("user-id")
+
+	// If client is undefined for authenticated user, clear session
+	if userId != nil && client == nil {
+		session := sessions.Default(c)
+		session.Delete("user-id")
+		err := session.Save()
+		if err != nil {
+			log.Println(err)
+		}
+	}
+}
+
 func main() {
 	log.SetLevel(log.DebugLevel)
 	log.SetReportCaller(true)
@@ -73,6 +88,7 @@ func main() {
 	// Set the router as the default one provided by Gin
 	router = gin.Default()
 	router.Use(sessions.Sessions("colabware-auth", store))
+	router.Use(checkAuth)
 
 	// Initialise DB
 	dbClient := initDB()
