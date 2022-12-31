@@ -105,7 +105,7 @@ func (con Connection) purchaseToken(c *gin.Context) {
 		// TODO: Subtract percentage as transaction commission fee
 		MoneyOut: TransactionData{
 			IsDone: false,
-			Amount: r.CryptoAmount,
+			Amount: r.CryptoAmount / ONE_TOKEN,
 			Symbol: "MATIC_TEST",
 		},
 		TokenOut: TransactionData{

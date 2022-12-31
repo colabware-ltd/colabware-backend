@@ -376,7 +376,7 @@ func (con Connection) transferToken(r TransferTokenRequest, n uint64) (common.Ha
 		log.Fatal(err)
 	}
 
-	log.Debugf("Token Address: %v\n", r.TokenAddress)
+	log.Debugf("Token Address: %v Amount: %v\n", r.TokenAddress, amount)
 	tx := types.NewTransaction(nonce, r.TokenAddress, value, gasLimit, gasPrice, data)
 
 	chainID, err := blockchain.NetworkID(context.Background())
