@@ -16,6 +16,7 @@ type Config struct {
 	EthKey        string  `mapstructure:"ETH_KEY"`
 	EthAddr       string  `mapstructure:"ETH_ADDR"`
 	EthChainId    int64   `mapstructure:"ETH_CHAIN_ID"`
+	MaticTestAddr string  `mapstructure:"MATIC_TEST_ADDR"`
 }
 
 // LoadConfig reads configuration from file or environment variables.

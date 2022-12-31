@@ -88,30 +88,29 @@ func (con Connection) purchaseToken(c *gin.Context) {
 		MoneyIn: TransactionData{
 			IsDone: false,
 			Amount: r.CryptoAmount,
-			Symbol: "GOERLI_TEST",
+			Symbol: "MATIC_TEST",
 		},
 		ETHReadyUser: TransactionData{
 			IsDone: false,
-			// TODO: This needs to be udpated, fixed for now
+			// TODO: Estimate gas amount to transfer
 			Amount: 0.0009,
-			Symbol: "ETH",
+			Symbol: "MATIC",
 		},
 		ETHReadyProject: TransactionData{
 			IsDone: false,
-			// TODO: This needs to be udpated, fixed for now
+			// TODO: Estimate gas amount to transfer
 			Amount: 0.0009,
-			Symbol: "ETH",
+			Symbol: "MATIC",
 		},
+		// TODO: Subtract percentage as transaction commission fee
 		MoneyOut: TransactionData{
 			IsDone: false,
-			// TODO: This needs to be udpated, fixed for now
 			Amount: r.CryptoAmount,
-			Symbol: "GOERLI_TEST",
+			Symbol: "MATIC_TEST",
 		},
 		TokenOut: TransactionData{
 			IsDone: false,
-			// TODO: This needs to be udpated, fixed for now
-			Amount: r.CryptoAmount,
+			Amount: con.calculateTokens(r.CryptoAmount, project),
 			Symbol: project.Token.Symbol,
 		},
 		ProjectWalletID: r.ProjectWalletID,
@@ -140,9 +139,8 @@ func (con Connection) purchaseToken(c *gin.Context) {
 }
 
 func (con Connection) startTokenPurchaseWorkFlow(r TokenPurchaseTransactionRecord) {
-
 	// connect to an ethereum node  hosted by infura
-	client, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	client, err := ethclient.Dial(colabwareConf.EthNode)
 	if err != nil {
 		log.Printf("Unable to connect to network:%v\n", err)
 		return
@@ -171,10 +169,12 @@ func (con Connection) startTokenPurchaseWorkFlow(r TokenPurchaseTransactionRecor
 	wg.Wait()
 
 	wg.Add(2)
-	// Send Money to Project Wallet
+
+	// // Send Money to Project Wallet
+	// TODO: Investigate why transfer isn't being processed
 	go con.waitTransferMoneyToProjectWallet(r, &wg, 0)
 
-	// Release Project Tokens for the user
+	// // Release Project Tokens for the user
 	go con.waitTransferTokenToUserWallet(r, &wg, 0)
 
 	wg.Wait()
@@ -187,8 +187,8 @@ func (con Connection) waitTransferMoneyToProjectWallet(r TokenPurchaseTransactio
 		FromWallet: r.UserWalletID,
 		ToWallet:   r.ProjectWalletID,
 		Amount:     r.MoneyOut.Amount,
-		// TEST_RAMP token address
-		TokenAddress: common.HexToAddress("0x5248dDdC7857987A2EfD81522AFBA1fCb017A4b7"),
+		// MATIC_TEST RAMP test token address
+		TokenAddress: common.HexToAddress(colabwareConf.MaticTestAddr),
 	}
 
 	hash, err := con.transferToken(transferRequest, n)
@@ -338,6 +338,11 @@ func (con Connection) flipRecordFlag(id primitive.ObjectID, flag string) error {
 	}
 
 	return nil
+}
+
+func (con Connection) calculateTokens(cryptoAmount float64, project *Project) float64 {
+	usdcReceived := cryptoAmount / ONE_TOKEN
+	return usdcReceived / project.Token.Price
 }
 
 func (con Connection) getUserTokens(c *gin.Context) {

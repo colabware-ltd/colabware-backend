@@ -54,7 +54,7 @@ type Token struct {
 	Name             string  `json:"name"`
     Address          string  `json:"address" bson:"address,omitempty"`
 	Symbol           string  `json:"symbol"`
-	Price            float32 `json:"price"`
+	Price            float64 `json:"price"`
 	TotalSupply      int64   `json:"total_supply"`
 	MaintainerSupply int64   `json:"maintainer_supply"`
 }

@@ -110,18 +110,31 @@ func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64, n uint
 		return *new(common.Hash), fmt.Errorf("Wallet not found")
 	}
 
-	// connect to an ethereum node  hosted by infura
+	// Connect to an ethereum node hosted by infura
 	client, err := ethclient.Dial(colabwareConf.EthNode)
 	if err != nil {
 		return *new(common.Hash), fmt.Errorf("Unable to connect to network:%v\n", err)
 	}
 
-	// Declan's wallet with tons of ETH (supposedly)
-	nonce, err := client.PendingNonceAt(context.Background(), common.HexToAddress(colabwareConf.EthAddr))
+	privateKey, err := crypto.HexToECDSA(colabwareConf.EthKey)
+	if err != nil {
+		return *new(common.Hash), err
+	}
+
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return *new(common.Hash), fmt.Errorf("cannot assert type: publicKey is not of type *ecdsa.PublicKey")
+	}
+
+	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
+	nonce, err := client.PendingNonceAt(context.Background(), fromAddress)
 	if err != nil {
 		return *new(common.Hash), err
 	}
 	nonce = maxInt(nonce, n)
+
+	chainId := big.NewInt(colabwareConf.EthChainId) // Goerli Chain ID
 
 	gasLimit := uint64(21000)
 	gasPrice, err := client.SuggestGasPrice(context.Background())
@@ -132,19 +145,10 @@ func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64, n uint
 	toAddress := common.HexToAddress(wallet.Address)
 	var data []byte
 	val := new(big.Float).SetFloat64(a)
+	
 	tx := types.NewTransaction(nonce, toAddress, etherToWei(val), gasLimit, gasPrice, data)
-
-	privateKeyByte, err := hexutil.Decode("0x" + colabwareConf.EthKey)
-	if err != nil {
-		return *new(common.Hash), err
-	}
-
-	privateKey, err := crypto.ToECDSA(privateKeyByte)
-	if err != nil {
-		return *new(common.Hash), err
-	}
-
-	signedTx, err := types.SignTx(tx, types.HomesteadSigner{}, privateKey)
+	
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
 	if err != nil {
 		return *new(common.Hash), err
 	}
