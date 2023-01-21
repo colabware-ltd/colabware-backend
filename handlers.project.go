@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -60,18 +59,10 @@ type Token struct {
 }
 
 type GitHub struct {
-	RepoOwner string       `json:"repo_owner" bson:"repo_owner,omitempty"`
-	RepoName  string       `json:"repo_name" bson:"repo_name,omitempty"`
-	Forks     []GitHubFork `json:"forks" bson:"forks,omitempty"`
+	RepoOwner string                 `json:"repo_owner" bson:"repo_owner,omitempty"`
+	RepoName  string                 `json:"repo_name" bson:"repo_name,omitempty"`
+	Forks     []utilities.GitHubFork `json:"forks" bson:"forks,omitempty"`
 }
-
-type GitHubFork struct {
-	FullName string `json:"full_name,omitempty" bson:"full_name,omitempty"`
-}
-
-// type GitHubBranch struct {
-// 	Name string `json:"name,omitempty" bson:"name,omitempty"`
-// }
 
 func (t Token) getBigTotalSupply() *big.Int {
 	i := big.NewInt(t.TotalSupply)
@@ -95,9 +86,7 @@ func (con Connection) postProject(c *gin.Context) {
 	session := sessions.Default(c)
 	// TODO: Update session to store db ID
 	userId := session.Get("user-id")
-	var user struct {
-		ID primitive.ObjectID `bson:"_id, omitempty"`
-	}
+	var user User
 	e := con.Users.FindOne(context.TODO(), bson.M{"login": userId}).Decode(&user)
 	if e != nil {
 		log.Printf("%v", e)
@@ -112,6 +101,21 @@ func (con Connection) postProject(c *gin.Context) {
 	p.ApprovalConfig.TokensRequired = 0.5
 	p.ApprovalConfig.MaintainerRequired = true
 
+	// Check that user is a maintainer of the project repository
+	isMaintainer, err := utilities.RepoMaintainer(client, p.GitHub.RepoOwner, p.GitHub.RepoName)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+
+	if !isMaintainer {
+		log.Printf("User isn't authorized to complete this request.")
+		c.IndentedJSON(http.StatusForbidden, gin.H{
+			"message": "You must be an administrator of the selected repository to proceed with this request.",
+		})
+		return
+	}
+
 	// TODO: Add validation to check whether project with name exists
 	result, err := con.Projects.InsertOne(context.TODO(), p)
 	selector := bson.M{"_id": user.ID}
@@ -125,6 +129,8 @@ func (con Connection) postProject(c *gin.Context) {
 	}
 
 	// Create wallet for project and get address; initial project tokens will be minted for this address.
+	// TODO: Provide the alternative option to import a wallet
+	// TODO: Return private key so we don't store this(?)
 	walletId, wallet := con.createWallet(result.InsertedID.(primitive.ObjectID))
 
 	// Deploy contract and store address; wait for execution to complete
@@ -148,6 +154,7 @@ func (con Connection) postProject(c *gin.Context) {
 	c.IndentedJSON(http.StatusCreated, p)
 }
 
+
 func (con Connection) getProject(c *gin.Context) {
 	name := c.Param("project")
 	project, err := con.getProjectByName(name)
@@ -159,20 +166,16 @@ func (con Connection) getProject(c *gin.Context) {
 
 	// If user is authenticated, get forks from GitHub API
 	if sessions.Default(c).Get("user-id") != nil {
-		var resTarget []GitHubFork
-		res, err := client.Get("https://api.github.com/repos/" + project.GitHub.RepoOwner + "/" + project.GitHub.RepoName + "/forks")
-
+		project.GitHub.Forks, err = utilities.RepoForks(
+			client, 
+			project.GitHub.RepoOwner, 
+			project.GitHub.RepoName,
+		)
 		if err != nil {
 			log.Printf("%v", err)
+			c.IndentedJSON(http.StatusInternalServerError, project)
 			return
 		}
-		defer res.Body.Close()
-		err = json.NewDecoder(res.Body).Decode(&resTarget)
-		if err != nil {
-			log.Printf("%v", err)
-			return
-		}
-		project.GitHub.Forks = resTarget
 	}
 	c.IndentedJSON(http.StatusFound, project)
 }
@@ -221,21 +224,14 @@ func getProjectBranches(c *gin.Context) {
 	owner := c.Param("owner")
 	repo := c.Param("repo")
 
-	var resTarget []struct {
-		Name string `json:"name,omitempty" bson:"name,omitempty"`
-	}
-	res, err := client.Get("https://api.github.com/repos/" + owner + "/" + repo + "/branches")
+	branches, err := utilities.RepoBranches(client, owner, repo)
 	if err != nil {
 		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
 	}
-	defer res.Body.Close()
-	err = json.NewDecoder(res.Body).Decode(&resTarget)
-	if err != nil {
-		log.Printf("%v", err)
-		return
-	}
-	c.IndentedJSON(http.StatusFound, resTarget)
+
+	c.IndentedJSON(http.StatusFound, branches)
 }
 
 func (con Connection) getProjectBalances(c *gin.Context) {
