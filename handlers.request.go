@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/colabware-ltd/colabware-backend/eth"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gin-contrib/sessions"
@@ -396,7 +397,7 @@ func (con Connection) checkApproval(id primitive.ObjectID) (bool, error) {
 	}
 
 	// // Get total supply of tokens
-	totalSupply, err := con.getTotalSupply(project.Address)
+	totalSupply, err := eth.ProjectTokenSupply(project.Address, colabwareConf.EthNode)
 	if err != nil {
 		log.Printf("%v", err)
 		return false, fmt.Errorf("%v", err)

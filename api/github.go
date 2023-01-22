@@ -1,4 +1,4 @@
-package utilities
+package api
 
 import (
 	"encoding/json"
@@ -63,10 +63,13 @@ func RepoForks(client *http.Client,repoOwner string, repoName string) ([]GitHubF
 	return forks, nil
 }
 
-func RepoMaintainer(client *http.Client,repoOwner string, repoName string) (bool, error) {
+func RepoMaintainer(client *http.Client, repoOwner string, repoName string) (bool, error) {
 	var repo GitHubRepo
 
-	res, err := client.Get("https://api.github.com/repos/" + repoOwner + "/" + repoName + "/")
+	log.Printf(repoOwner)
+	log.Printf(repoName)
+
+	res, err := client.Get("https://api.github.com/repos/" + repoOwner + "/" + repoName)
 	if err != nil {
 		log.Printf("%v", err)
 		return false, fmt.Errorf("%v", err)

@@ -11,11 +11,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/colabware-ltd/colabware-backend/contracts"
+	"github.com/colabware-ltd/colabware-backend/api"
+	"github.com/colabware-ltd/colabware-backend/eth"
 	"github.com/colabware-ltd/colabware-backend/utilities"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
@@ -42,6 +40,8 @@ type Project struct {
 	Roadmap        []primitive.ObjectID `json:"roadmap" bson:"roadmap,omitempty"`
 	Status         string               `json:"status" bson:"status,omitempty"`
 	ApprovalConfig ApprovalConfig       `json:"approval_config" bson:"approval_config,omitempty"`
+	USDCBalance    int64                `json:"usdc_balance" bson:"usdc_balance,omitempty"`
+	TokenHolders   []TokenHolding       `json:"token_holders" bson:"token_holders,omitempty"`
 }
 
 type ApprovalConfig struct {
@@ -61,17 +61,17 @@ type Token struct {
 type GitHub struct {
 	RepoOwner string                 `json:"repo_owner" bson:"repo_owner,omitempty"`
 	RepoName  string                 `json:"repo_name" bson:"repo_name,omitempty"`
-	Forks     []utilities.GitHubFork `json:"forks" bson:"forks,omitempty"`
+	Forks     []api.GitHubFork `json:"forks" bson:"forks,omitempty"`
 }
 
 func (t Token) getBigTotalSupply() *big.Int {
 	i := big.NewInt(t.TotalSupply)
-	return i.Mul(i, big.NewInt(ONE_TOKEN))
+	return i.Mul(i, big.NewInt(utilities.ONE_TOKEN))
 }
 
 func (t Token) getBigMaintainerSupply() *big.Int {
 	i := big.NewInt(t.MaintainerSupply)
-	return i.Mul(i, big.NewInt(ONE_TOKEN))
+	return i.Mul(i, big.NewInt(utilities.ONE_TOKEN))
 }
 
 func (con Connection) postProject(c *gin.Context) {
@@ -102,13 +102,15 @@ func (con Connection) postProject(c *gin.Context) {
 	p.ApprovalConfig.MaintainerRequired = true
 
 	// Check that user is a maintainer of the project repository
-	isMaintainer, err := utilities.RepoMaintainer(client, p.GitHub.RepoOwner, p.GitHub.RepoName)
+	isMaintainer, err := api.RepoMaintainer(client, p.GitHub.RepoOwner, p.GitHub.RepoName)
 	if err != nil {
 		log.Printf("%v", err)
 		return
 	}
 
-	if !isMaintainer {
+	log.Print(isMaintainer)
+
+	if isMaintainer == false {
 		log.Printf("User isn't authorized to complete this request.")
 		c.IndentedJSON(http.StatusForbidden, gin.H{
 			"message": "You must be an administrator of the selected repository to proceed with this request.",
@@ -134,7 +136,7 @@ func (con Connection) postProject(c *gin.Context) {
 	walletId, wallet := con.createWallet(result.InsertedID.(primitive.ObjectID))
 
 	// Deploy contract and store address; wait for execution to complete
-	projectAddress := utilities.DeployProject(p.Token.Name, p.Token.Symbol, *p.Token.getBigTotalSupply(), *p.Token.getBigMaintainerSupply(), wallet.Address, colabwareConf.EthNode, colabwareConf.EthKey, colabwareConf.EthChainId)
+	projectAddress := eth.DeployProject(p.Token.Name, p.Token.Symbol, *p.Token.getBigTotalSupply(), *p.Token.getBigMaintainerSupply(), wallet.Address, colabwareConf.EthNode, colabwareConf.EthKey, colabwareConf.EthChainId)
 	log.Printf("Contract pending deploy: 0x%x\n", projectAddress)
 
 	selector = bson.M{"_id": result.InsertedID.(primitive.ObjectID)}
@@ -164,9 +166,31 @@ func (con Connection) getProject(c *gin.Context) {
 		return
 	}
 
+	// Fetch balance of USDC
+	balance, err := eth.FetchBalance(
+		project.WalletAddress, 
+		colabwareConf.MaticTestAddr,
+		colabwareConf.EthNode, 
+		colabwareConf.EthChainId,
+	)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+	project.USDCBalance = balance.Int64()
+
+	// Get token holders
+	project.TokenHolders, err = con.listTokenHolders(project.Token.Address)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
 	// If user is authenticated, get forks from GitHub API
 	if sessions.Default(c).Get("user-id") != nil {
-		project.GitHub.Forks, err = utilities.RepoForks(
+		project.GitHub.Forks, err = api.RepoForks(
 			client, 
 			project.GitHub.RepoOwner, 
 			project.GitHub.RepoName,
@@ -224,7 +248,7 @@ func getProjectBranches(c *gin.Context) {
 	owner := c.Param("owner")
 	repo := c.Param("repo")
 
-	branches, err := utilities.RepoBranches(client, owner, repo)
+	branches, err := api.RepoBranches(client, owner, repo)
 	if err != nil {
 		log.Printf("%v", err)
 		c.IndentedJSON(http.StatusInternalServerError, nil)
@@ -234,33 +258,24 @@ func getProjectBranches(c *gin.Context) {
 	c.IndentedJSON(http.StatusFound, branches)
 }
 
-func (con Connection) getProjectBalances(c *gin.Context) {
+func (con Connection) getTokenBalanceOverview(c *gin.Context) {
 	project := c.Param("project")
 
-	client, err := ethclient.Dial(colabwareConf.EthNode)
+	maintainerBalance, maintainerReserved, investorBalance, err := eth.ProjectTokenBalances(
+		project, 
+		colabwareConf.EthNode,
+	)
 	if err != nil {
-		log.Fatalf("Unable to connect to network:%v\n", err)
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
 		return
-	}
-
-	contract, err := contracts.NewProjectCaller(common.HexToAddress(project), client)
-	if err != nil {
-		log.Fatalf("Unable to create contract binding:%v\n", err)
-		return
-	}
-	maintainerBalance, maintainerReserved, investorBalance, _ := contract.ListBalances(nil)
-
-	if maintainerBalance != nil && maintainerReserved != nil && investorBalance != nil {
-		maintainerBalance = new(big.Int).Div(maintainerBalance, big.NewInt(ONE_TOKEN))
-		maintainerReserved = new(big.Int).Div(maintainerReserved, big.NewInt(ONE_TOKEN))
-		investorBalance = new(big.Int).Div(investorBalance, big.NewInt(ONE_TOKEN))
 	}
 
 	// Get Token balance for current user
 	c.IndentedJSON(http.StatusFound, gin.H{
-		"maintainer_balance":  maintainerBalance,
-		"maintainer_reserved": maintainerReserved,
-		"investor_balance":    investorBalance,
+		"maintainer_balance":  utilities.BigIntToTokens(maintainerBalance),
+		"maintainer_reserved": utilities.BigIntToTokens(maintainerReserved),
+		"investor_balance":    utilities.BigIntToTokens(investorBalance),
 	})
 }
 
@@ -375,6 +390,8 @@ func (con Connection) getTokenHolding(c *gin.Context) {
 	})
 }
 
+
+
 func (con Connection) isMaintainer(userId primitive.ObjectID, projectId primitive.ObjectID) (bool, *Project, error) {
 	project, err := con.getProjectById(projectId)
 	if err != nil {
@@ -391,26 +408,4 @@ func (con Connection) isMaintainer(userId primitive.ObjectID, projectId primitiv
 	}
 	
 	return isMaintainer, project, nil
-}
-
-func (con Connection) getTotalSupply(address string) (int64, error) {
-	// Get total supply of tokens
-	client, err := ethclient.Dial(colabwareConf.EthNode)
-	if err != nil {
-		log.Printf("%v", err)
-		return -1, fmt.Errorf("%v", err)
-	}
-	contract, err := contracts.NewProjectCaller(common.HexToAddress(address), client)
-	if err != nil {
-		log.Printf("%v", err)
-		return -1, fmt.Errorf("%v", err)
-	}
-	supply, err := contract.GetTokenSupply(&bind.CallOpts{})
-	if err != nil {
-		log.Printf("%v", err)
-		return -1, fmt.Errorf("%v", err)
-	}
-	totalSupply := new(big.Int).Div(supply, big.NewInt(ONE_TOKEN)).Int64()
-
-	return totalSupply, nil
 }

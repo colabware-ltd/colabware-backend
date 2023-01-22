@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/colabware-ltd/colabware-backend/eth"
+	"github.com/colabware-ltd/colabware-backend/utilities"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -105,7 +107,7 @@ func (con Connection) purchaseToken(c *gin.Context) {
 		// TODO: Subtract percentage as transaction commission fee
 		MoneyOut: TransactionData{
 			IsDone: false,
-			Amount: r.CryptoAmount / ONE_TOKEN,
+			Amount: r.CryptoAmount / utilities.ONE_TOKEN,
 			Symbol: "MATIC_TEST",
 		},
 		TokenOut: TransactionData{
@@ -251,7 +253,7 @@ func (con Connection) waitSupplyETHForWallet(w primitive.ObjectID, a float64, re
 }
 
 func waitForTransaction(h common.Hash) *types.Transaction {
-	c, err := ethclient.Dial("https://goerli.infura.io/v3/f3f2d6ceb53143cfbba9d2326bf5617f")
+	c, err := ethclient.Dial(colabwareConf.EthNode)
 	if err != nil {
 		log.Errorf("Unable to connect to network:%v\n", err)
 		return nil
@@ -341,7 +343,7 @@ func (con Connection) flipRecordFlag(id primitive.ObjectID, flag string) error {
 }
 
 func (con Connection) calculateTokens(cryptoAmount float64, project *Project) float64 {
-	usdcReceived := cryptoAmount / ONE_TOKEN
+	usdcReceived := cryptoAmount / utilities.ONE_TOKEN
 	return usdcReceived / project.Token.Price
 }
 
@@ -372,4 +374,33 @@ func (con Connection) getUserTokens(c *gin.Context) {
 		return
 	}
 	c.IndentedJSON(http.StatusFound, gin.H{"results": tokenHoldings})
+}
+
+func (con Connection) getBalance(c *gin.Context) {
+	token := c.Param("token")
+	wallet := c.Param("wallet")
+
+	balance, err := eth.FetchBalance(wallet, token, colabwareConf.EthNode, colabwareConf.EthChainId)
+	if err != nil {
+		log.Printf("%v", err)
+		c.IndentedJSON(http.StatusInternalServerError, nil)
+		return
+	}
+
+	c.IndentedJSON(http.StatusFound, balance)
+}
+
+func (con Connection) listTokenHolders(token string) ([]TokenHolding, error) {
+	// Get token holdings for user
+	filterCursor, err := con.TokenHoldings.Find(context.TODO(), bson.M{"token_address": token})
+	if err != nil {
+		return nil, fmt.Errorf("%v", err)
+	}
+	var tokenHoldings []TokenHolding
+	err = filterCursor.All(context.TODO(), &tokenHoldings)
+	if err != nil {
+		return nil, fmt.Errorf("%v", err)
+	}
+
+	return tokenHoldings, nil
 }

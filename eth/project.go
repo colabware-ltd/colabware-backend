@@ -1,11 +1,13 @@
-package utilities
+package eth
 
 import (
 	"context"
 	"crypto/ecdsa"
+	"fmt"
 	"math/big"
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
+	"github.com/colabware-ltd/colabware-backend/utilities"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -13,7 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, maintainerSupply big.Int, walletAddress string, ethNode string, key string, chain int64) common.Address {
+func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, maintainerSupply big.Int, walletAddress string, ethNode string, key string, ethChainId int64) common.Address {
 	// Connect to an ethereum node
 	client, err := ethclient.Dial(ethNode)
 	if err != nil {
@@ -43,7 +45,7 @@ func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, ma
 		log.Fatal(err)
 	}
 
-	chainId := big.NewInt(chain) // Goerli Chain ID
+	chainId := big.NewInt(ethChainId) // Goerli Chain ID
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainId)
 	if err != nil {
 		log.Fatal(err)
@@ -73,4 +75,48 @@ func DeployProject(tokenName string, tokenSymbol string, totalSupply big.Int, ma
 	}
 
 	return address
+}
+
+func ProjectTokenBalances(projectAddress string, ethNode string) (*big.Int, *big.Int, *big.Int, error) {
+	client, err := ethclient.Dial(ethNode)
+	if err != nil {
+		log.Printf("%v", err)
+		return nil, nil, nil, fmt.Errorf("%v", err)
+	}
+
+	contract, err := contracts.NewProjectCaller(common.HexToAddress(projectAddress), client)
+	if err != nil {
+		log.Printf("%v", err)
+		return nil, nil, nil, fmt.Errorf("%v", err)
+	}
+
+	maintainerBalance, maintainerReserved, investorBalance, err := contract.ListBalances(nil)
+	if err != nil {
+		log.Printf("%v", err)
+		return nil, nil, nil, fmt.Errorf("%v", err)
+	}
+
+	return maintainerBalance, maintainerReserved, investorBalance, nil
+}
+
+func ProjectTokenSupply(address string, ethNode string) (int64, error) {
+	// Get total supply of tokens
+	client, err := ethclient.Dial(ethNode)
+	if err != nil {
+		log.Printf("%v", err)
+		return -1, fmt.Errorf("%v", err)
+	}
+	contract, err := contracts.NewProjectCaller(common.HexToAddress(address), client)
+	if err != nil {
+		log.Printf("%v", err)
+		return -1, fmt.Errorf("%v", err)
+	}
+	supply, err := contract.GetTokenSupply(&bind.CallOpts{})
+	if err != nil {
+		log.Printf("%v", err)
+		return -1, fmt.Errorf("%v", err)
+	}
+	totalSupply := utilities.BigIntToTokens(supply).Int64()
+
+	return totalSupply, nil
 }

@@ -5,6 +5,7 @@ import (
 	"math/big"
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
+	"github.com/colabware-ltd/colabware-backend/utilities"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -82,7 +83,7 @@ func (con Connection) ethDeploymentMonitor() {
 						log.Printf("%v", err)
 						continue
 					}
-					tokens := new(big.Int).Div(supply, big.NewInt(ONE_TOKEN)).Int64()
+					tokens := new(big.Int).Div(supply, big.NewInt(utilities.ONE_TOKEN)).Int64()
 
 					con.updateTokenHoldings(
 						tokenAddress.Hex(),

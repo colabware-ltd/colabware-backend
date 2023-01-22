@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
+	"github.com/colabware-ltd/colabware-backend/utilities"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
@@ -22,11 +22,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/params"
 	"golang.org/x/crypto/sha3"
 )
-
-const ONE_TOKEN = 1000000000000000000
 
 type Wallet struct {
 	ID         primitive.ObjectID `bson:"_id" json:"_id"`
@@ -97,12 +94,7 @@ func (con Connection) transferBetweenWallets(r TransferBetweenWalletsRequest) er
 	return con.transferETH(transferRequest)
 }
 
-func maxInt(x, y uint64) uint64 {
-	if x < y {
-		return y
-	}
-	return x
-}
+
 
 func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64, n uint64) (common.Hash, error) {
 	wallet := con.getWalletFromID(w)
@@ -132,7 +124,7 @@ func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64, n uint
 	if err != nil {
 		return *new(common.Hash), err
 	}
-	nonce = maxInt(nonce, n)
+	nonce = utilities.MaxInt(nonce, n)
 
 	chainId := big.NewInt(colabwareConf.EthChainId) // Goerli Chain ID
 
@@ -146,7 +138,7 @@ func (con Connection) supplyETHForWallet(w primitive.ObjectID, a float64, n uint
 	var data []byte
 	val := new(big.Float).SetFloat64(a)
 	
-	tx := types.NewTransaction(nonce, toAddress, etherToWei(val), gasLimit, gasPrice, data)
+	tx := types.NewTransaction(nonce, toAddress, utilities.EtherToWei(val), gasLimit, gasPrice, data)
 	
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
 	if err != nil {
@@ -191,7 +183,7 @@ func (con Connection) transferETH(r TransferETHRequest) error {
 	toAddress := common.HexToAddress(r.To)
 	var data []byte
 	val := new(big.Float).SetFloat64(r.Amount)
-	tx := types.NewTransaction(nonce, toAddress, etherToWei(val), gasLimit, gasPrice, data)
+	tx := types.NewTransaction(nonce, toAddress, utilities.EtherToWei(val), gasLimit, gasPrice, data)
 
 	privateKeyByte, err := hexutil.Decode("0x" + wallet.PrivateKey)
 	if err != nil {
@@ -291,22 +283,7 @@ func (con Connection) transferTokenFromWalletToProject(projectWallet primitive.O
 	return hash, err
 }
 
-func floatToBigInt(val float64) *big.Int {
-	bigval := new(big.Float)
-	bigval.SetFloat64(val)
-	// Set precision if required.
-	// bigval.SetPrec(64)
 
-	oneToken := new(big.Float)
-	oneToken.SetInt(big.NewInt(ONE_TOKEN))
-
-	bigval.Mul(bigval, oneToken)
-
-	result := new(big.Int)
-	bigval.Int(result)
-
-	return result
-}
 
 func (con Connection) transferToken(r TransferTokenRequest, n uint64) (common.Hash, error) {
 	fromWallet := con.getWalletFromID(r.FromWallet)
@@ -329,7 +306,7 @@ func (con Connection) transferToken(r TransferTokenRequest, n uint64) (common.Ha
 	if err != nil {
 		return *new(common.Hash), err
 	}
-	nonce = maxInt(nonce, n)
+	nonce = utilities.MaxInt(nonce, n)
 
 	toAddress := common.HexToAddress(toWallet.Address)
 
@@ -352,7 +329,7 @@ func (con Connection) transferToken(r TransferTokenRequest, n uint64) (common.Ha
 
 	paddedAddress := common.LeftPadBytes(toAddress.Bytes(), 32)
 
-	amount := floatToBigInt(r.Amount)
+	amount := utilities.FloatToBigInt(r.Amount)
 
 	paddedAmount := common.LeftPadBytes(amount.Bytes(), 32)
 
@@ -454,20 +431,6 @@ func (con Connection) createWallet(owner primitive.ObjectID) (primitive.ObjectID
 	return result.InsertedID.(primitive.ObjectID), w
 }
 
-func weiToEther(wei *big.Int) *big.Float {
-	return new(big.Float).Quo(new(big.Float).SetInt(wei), big.NewFloat(params.Ether))
-}
-
-func etherToWei(eth *big.Float) *big.Int {
-	truncInt, _ := eth.Int(nil)
-	truncInt = new(big.Int).Mul(truncInt, big.NewInt(params.Ether))
-	fracStr := strings.Split(fmt.Sprintf("%.18f", eth), ".")[1]
-	fracStr += strings.Repeat("0", 18-len(fracStr))
-	fracInt, _ := new(big.Int).SetString(fracStr, 10)
-	wei := new(big.Int).Add(truncInt, fracInt)
-	return wei
-}
-
 // TODO: Search by ID instead of walletName
 func (con Connection) getWalletFromOwner(owner primitive.ObjectID) *Wallet {
 	wallet := &Wallet{}
@@ -522,31 +485,4 @@ func (con Connection) getWalletIDFromAddr(addr string) (*primitive.ObjectID, err
 
 	log.Printf("Wallet ID found: %s", wallet.ID)
 	return &wallet.ID, nil
-}
-
-func (con Connection) getBalance(c *gin.Context) {
-	project := c.Param("project")
-	wallet := c.Param("wallet")
-	c.IndentedJSON(http.StatusFound, readBalance(project, wallet))
-}
-
-func readBalance(project string, wallet string) *big.Int {
-	// Connect to ETH node hosted by Infura
-	client, err := ethclient.Dial(colabwareConf.EthNode)
-	if err != nil {
-		log.Fatalf("Unable to connect to network:%v\n", err)
-		return big.NewInt(-1)
-	}
-
-	// Create contract binding
-	contract, err := contracts.NewProjectCaller(common.HexToAddress(project), client)
-
-	// Get balance associated with wallet address
-	b, err := contract.GetBalance(nil, common.HexToAddress(wallet))
-	if err != nil {
-		log.Fatalf("Unable to get token balance for specified wallet:%v\n", err)
-		return big.NewInt(-1)
-	}
-
-	return b
 }

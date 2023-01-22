@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/colabware-ltd/colabware-backend/contracts"
+	"github.com/colabware-ltd/colabware-backend/eth"
+	"github.com/colabware-ltd/colabware-backend/utilities"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -70,7 +72,7 @@ func (con Connection) updateTokenHoldings(tokenAddress string, fromAddress strin
 	}
 
 	// Get total balance
-	totalSupply, err := con.getTotalSupply(project.Address)
+	totalSupply, err := eth.ProjectTokenSupply(project.Address, colabwareConf.EthNode)
 	if err != nil {
 		log.Printf("%v", err)
 		return fmt.Errorf("%v", err)
@@ -151,7 +153,7 @@ func (con Connection) ethLogger() {
 					transferEvent.From = common.HexToAddress(vLog.Topics[1].Hex())
 					transferEvent.To = common.HexToAddress(vLog.Topics[2].Hex())
 					
-					tokens := new(big.Int).Div(transferEvent.Value, big.NewInt(ONE_TOKEN)).Int64()
+					tokens := new(big.Int).Div(transferEvent.Value, big.NewInt(utilities.ONE_TOKEN)).Int64()
 
 					_, err := con.TokenEventLogs.InsertOne(context.TODO(), bson.M{
 						"from": transferEvent.From.Hex(),
