@@ -33,7 +33,7 @@ type TokenHolding struct {
 	TotalSupply   uint64 `json:"total_supply" bson:"total_supply"`
 	TokenName     string `json:"token_name" bson:"token_name"`
 	TokenSymbol   string `json:"token_symbol" bson:"token_symbol"`
-	ProjectName   string `json:"project_name" bson:"project_name"`
+	TokenHolder   string `json:"token_holder" bson:"token_holder"`
 } 
 
 func (con Connection) getTokenAddresses() {
@@ -71,6 +71,19 @@ func (con Connection) updateTokenHoldings(tokenAddress string, fromAddress strin
 		return fmt.Errorf("%v", err)
 	}
 
+	var tokenHolder string
+	if (fromAddress == NULL_ADDRESS) {
+		tokenHolder = project.Name
+	} else {
+		user, err := con.getUserBy("wallet_address", toAddress)
+		if err != nil {
+			log.Printf("%v", err)
+			return fmt.Errorf("%v", err)
+		}
+
+		tokenHolder = user.Login
+	}
+
 	// Get total balance
 	totalSupply, err := eth.ProjectTokenSupply(project.Address, colabwareConf.EthNode)
 	if err != nil {
@@ -91,6 +104,7 @@ func (con Connection) updateTokenHoldings(tokenAddress string, fromAddress strin
 			"token_symbol": project.Token.Symbol,
 			"project_name": project.Name,
 			"total_supply": totalSupply,
+			"token_holder": tokenHolder,
 		},
 	}
 	con.TokenHoldings.FindOneAndUpdate(context.TODO(), toSelector, toUpdate, opts)
@@ -105,12 +119,12 @@ func (con Connection) updateTokenHoldings(tokenAddress string, fromAddress strin
 			"$inc": bson.M{
 				"balance": -amount,
 			},
-			"$set": bson.M{
-				"token_name": project.Token.Name,
-				"token_symbol": project.Token.Symbol,
-				"project_name": project.Name,
-				"total_supply": totalSupply,
-			},
+			// "$set": bson.M{
+			// 	"token_name": project.Token.Name,
+			// 	"token_symbol": project.Token.Symbol,
+			// 	"project_name": project.Name,
+			// 	"total_supply": totalSupply,
+			// },
 		}
 		con.TokenHoldings.FindOneAndUpdate(context.TODO(), fromSelector, fromUpdate)
 	}

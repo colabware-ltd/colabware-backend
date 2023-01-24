@@ -256,6 +256,16 @@ func (con Connection) getUserById(id primitive.ObjectID) (*User, error) {
 	return &user, nil
 }
 
+func (con Connection) getUserBy(field string, address string) (*User, error) {
+	var user User
+	err = con.Users.FindOne(context.TODO(), bson.M{field: address}).Decode(&user)
+	if err != nil {
+		log.Printf("%v", err)
+		return nil, fmt.Errorf("%v", err)
+	}
+	return &user, nil
+}
+
 func (con Connection) updateUserDetails(c *gin.Context) {
 	userId := sessions.Default(c).Get("user-id")
 	var user User
