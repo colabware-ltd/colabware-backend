@@ -134,28 +134,28 @@ func (con Connection) authHandler(c *gin.Context) {
 		// Create new user in db
 		log.Printf("Existing user not found. Create new entry in db.")
 
-		result, err := con.Users.InsertOne(context.TODO(), u)
+		_, err := con.Users.InsertOne(context.TODO(), u)
 		if err != nil {
 			log.Printf("%v", err)
 			return
 		}
 
 		// Create wallet for project and get address; initial project tokens will be minted for this address.
-		_, w := con.createWallet(result.InsertedID.(primitive.ObjectID))
+		// _, w := con.createWallet(result.InsertedID.(primitive.ObjectID))
 
 		// Link a wallet to a user
-		_, err = con.Users.UpdateOne(
-			context.TODO(),
-			bson.M{"_id": result.InsertedID.(primitive.ObjectID)},
-			bson.D{
-				{"$set", bson.D{{"wallet_address", w.Address}}},
-			},
-		)
-		if err != nil {
-			log.Printf("%v", err)
-			return
-		}
-		log.Printf("New user and wallet successfully created.")
+		// _, err = con.Users.UpdateOne(
+		// 	context.TODO(),
+		// 	bson.M{"_id": result.InsertedID.(primitive.ObjectID)},
+		// 	bson.D{
+		// 		{"$set", bson.D{{"wallet_address", w.Address}}},
+		// 	},
+		// )
+		// if err != nil {
+		// 	log.Printf("%v", err)
+		// 	return
+		// }
+		// log.Printf("New user and wallet successfully created.")
 
 	}
 	c.Redirect(http.StatusFound, "/")

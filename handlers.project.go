@@ -41,7 +41,7 @@ type Project struct {
 	Status         string               `json:"status" bson:"status,omitempty"`
 	ApprovalConfig ApprovalConfig       `json:"approval_config" bson:"approval_config,omitempty"`
 	USDCBalance    int64                `json:"usdc_balance" bson:"usdc_balance,omitempty"`
-	TokenHolders   []TokenHolding       `json:"token_holders" bson:"token_holders,omitempty"`
+	TokenHolders   []TokenHolding       `json:"token_holders" bson:"token_holders"`
 }
 
 type ApprovalConfig struct {
@@ -100,6 +100,8 @@ func (con Connection) postProject(c *gin.Context) {
 	// TODO: Introduce as configuration option on frontend
 	p.ApprovalConfig.TokensRequired = 0.5
 	p.ApprovalConfig.MaintainerRequired = true
+	
+	p.TokenHolders = []TokenHolding{}
 
 	// Check that user is a maintainer of the project repository
 	isMaintainer, err := api.RepoMaintainer(client, p.GitHub.RepoOwner, p.GitHub.RepoName)
